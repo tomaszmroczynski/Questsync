@@ -29,14 +29,17 @@ class HealthRepository(
     val latestWithingsMetrics: Flow<WithingsMetricsEntity?> = healthDao.getLatestWithingsMetrics()
     val latestSamsungMetrics: Flow<SamsungHealthMetricsEntity?> = healthDao.getLatestSamsungMetrics()
 
-    suspend fun saveQuestRealTimeData(activity: QuestActivityEntity) {
+    suspend fun saveQuestRealTimeData(
+        activity: QuestActivityEntity, 
+        packageName: String? = null,
+        isHeadsetWorn: Boolean = true
+    ) {
         // Save locally
         healthDao.insertQuestActivity(activity)
         
         // Push to RipperMCP server
         if (BuildConfig.MCP_SERVER_URL.isNotEmpty()) {
             try {
-                // Ensure we use the base domain for sync, correctly handling potential trailing slashes or paths
                 val mcpUrl = BuildConfig.MCP_SERVER_URL.trimEnd('/')
                 val baseUrl = if (mcpUrl.endsWith("/mcp")) {
                     mcpUrl.substringBeforeLast("/mcp")
@@ -54,9 +57,11 @@ class HealthRepository(
                         type = "real-time-activity",
                         data = QuestSyncData(
                             activityName = activity.activityName,
+                            packageName = packageName,
                             durationMinutes = activity.durationMinutes,
                             caloriesBurned = activity.caloriesBurned,
-                            timestamp = activity.timestamp
+                            timestamp = activity.timestamp,
+                            isHeadsetWorn = isHeadsetWorn
                         )
                     ))
                 }

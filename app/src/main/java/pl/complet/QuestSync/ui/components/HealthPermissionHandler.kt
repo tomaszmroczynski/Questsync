@@ -12,11 +12,17 @@ import com.google.accompanist.permissions.rememberMultiplePermissionsState
 fun HealthPermissionHandler(
     onPermissionsGranted: @Composable () -> Unit
 ) {
+    val permissions = mutableListOf(
+        android.Manifest.permission.ACTIVITY_RECOGNITION,
+        android.Manifest.permission.BODY_SENSORS
+    )
+    
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+        permissions.add(android.Manifest.permission.POST_NOTIFICATIONS)
+    }
+
     val permissionState = rememberMultiplePermissionsState(
-        permissions = listOf(
-            android.Manifest.permission.ACTIVITY_RECOGNITION,
-            android.Manifest.permission.BODY_SENSORS
-        )
+        permissions = permissions
     )
 
     if (permissionState.allPermissionsGranted) {

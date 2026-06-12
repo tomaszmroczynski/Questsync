@@ -12,7 +12,9 @@ data class SyncRequest(
 @Serializable
 data class QuestSyncData(
     val activityName: String,
+    val packageName: String? = null,
     val durationMinutes: Int,
     val caloriesBurned: Int,
-    val timestamp: Long
+    val timestamp: Long,
+    val isHeadsetWorn: Boolean = true
 )
