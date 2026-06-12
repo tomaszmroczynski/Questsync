@@ -1,0 +1,25 @@
+*.iml
+.gradle
+/local.properties
+/.idea/
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+
+# Archives
+*.tar
+*.tar.gz
+
+# MCP Server Data and Env
+RipperMCP/data/
+RipperMCP/data-mateusz/
+RipperMCP/.env
+RipperMCP/.env.mateusz
+RipperMCP/__pycache__/
+
+# Android specifics
+app/build/
+.agent/
+.kotlin/

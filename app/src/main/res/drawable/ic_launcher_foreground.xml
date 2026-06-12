@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- VR Headset Body -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M29,48 A6,6 0 0 1 35,42 H73 A6,6 0 0 1 79,48 V66 A6,6 0 0 1 73,72 H62 L58,66 H50 L46,72 H35 A6,6 0 0 1 29,66 Z" />
+
+    <!-- Fitness Pulse Line (matches background color to look like a cutout) -->
+    <path
+        android:strokeColor="#2962FF"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M36,57 H42 L48,48 L54,66 L60,57 H72" />
+
+    <!-- Sync Arrows (White) -->
+    <!-- Top Arc -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M30,34 A32,32 0 0 1 78,34" />
+    <!-- Top Arrowhead -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M78,34 L72,30 V38 Z" />
+
+    <!-- Bottom Arc -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M78,74 A32,32 0 0 1 30,74" />
+    <!-- Bottom Arrowhead -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,74 L36,78 V70 Z" />
+
+</vector>
