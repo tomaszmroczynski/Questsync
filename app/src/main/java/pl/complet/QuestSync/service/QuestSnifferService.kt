@@ -4,8 +4,12 @@ import android.app.*
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
-import android.os.Build
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.os.IBinder
+import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.*
@@ -14,16 +18,25 @@ import pl.complet.QuestSync.data.local.QuestActivityEntity
 import pl.complet.QuestSync.data.repository.HealthRepository
 import java.util.Locale
 
-class QuestSnifferService : Service() {
+class QuestSnifferService : Service(), SensorEventListener {
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private lateinit var repository: HealthRepository
     private lateinit var usageStatsManager: UsageStatsManager
+    private lateinit var sensorManager: SensorManager
+    private lateinit var powerManager: PowerManager
+    private var proximitySensor: Sensor? = null
 
     private var sessionStartTime = 0L
+    private var cumulativePausedTime = 0L
+    private var lastPauseTimestamp = 0L
+    
     private var currentPackageName = "Unknown"
     private var currentFriendlyAppName = "VR Session"
     private var isSessionActive = false
+    
+    private var isHeadsetWorn = false
+    private var lastRemovedTimestamp = 0L
 
     private val appMap = mapOf(
         "com.beatgames.beatsaber" to "Beat Saber",
@@ -40,16 +53,24 @@ class QuestSnifferService : Service() {
         const val CHANNEL_ID = "QuestSnifferChannel"
         const val NOTIFICATION_ID = 1001
         private const val TAG = "QuestSnifferService"
-        private const val TRACKING_INTERVAL_MS = 15000L // Check every 15s
-        private const val SYNC_INTERVAL_MS = 30000L // Sync every 30s
+        private const val TRACKING_INTERVAL_MS = 15000L
+        private const val SYNC_INTERVAL_MS = 30000L
+        private const val AUTO_FINALIZE_TIMEOUT_MS = 60000L // 60s removal = end session
     }
 
     override fun onCreate() {
         super.onCreate()
-        Log.d(TAG, "DECODER: Battery-Efficient Duration Tracking Initialized")
+        Log.d(TAG, "DECODER: Initializing Truthful Headset Tracking")
         repository = DataModule.provideHealthRepository(this)
         usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+        powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         
+        proximitySensor = sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY)
+        proximitySensor?.let {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL)
+        }
+
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification("Monitoring VR Activity..."))
 
@@ -61,11 +82,36 @@ class QuestSnifferService : Service() {
             var lastSyncTime = System.currentTimeMillis()
             
             while (isActive) {
-                detectForegroundApp()
+                val isInteractive = powerManager.isInteractive
                 
-                if (isSessionActive && System.currentTimeMillis() - lastSyncTime >= SYNC_INTERVAL_MS) {
-                    syncCurrentSession("Live Update")
-                    lastSyncTime = System.currentTimeMillis()
+                // Effective Worn State: Proximity says Near AND Screen is ON
+                val effectivelyWorn = isHeadsetWorn && isInteractive
+                
+                if (effectivelyWorn) {
+                    if (lastPauseTimestamp != 0L) {
+                        // Resumed tracking
+                        cumulativePausedTime += (System.currentTimeMillis() - lastPauseTimestamp)
+                        lastPauseTimestamp = 0L
+                        Log.d(TAG, "DECODER: Tracking Resumed")
+                    }
+                    
+                    detectForegroundApp()
+                    
+                    if (isSessionActive && System.currentTimeMillis() - lastSyncTime >= SYNC_INTERVAL_MS) {
+                        syncCurrentSession("Live Update")
+                        lastSyncTime = System.currentTimeMillis()
+                    }
+                } else {
+                    if (lastPauseTimestamp == 0L) {
+                        lastPauseTimestamp = System.currentTimeMillis()
+                        Log.d(TAG, "DECODER: Tracking Paused (Headset removed or asleep)")
+                    }
+                    
+                    // Auto-finalize logic
+                    if (isSessionActive && System.currentTimeMillis() - lastRemovedTimestamp > AUTO_FINALIZE_TIMEOUT_MS) {
+                        Log.i(TAG, "DECODER: Auto-finalizing session due to inactivity")
+                        handleReturnToHome()
+                    }
                 }
                 
                 delay(TRACKING_INTERVAL_MS)
@@ -93,9 +139,6 @@ class QuestSnifferService : Service() {
                     handleAppSwitch(pkg)
                 }
             } ?: handleReturnToHome()
-        } else {
-            Log.w(TAG, "DECODER: No usage stats found. Check permissions.")
-            handleReturnToHome()
         }
     }
 
@@ -107,6 +150,8 @@ class QuestSnifferService : Service() {
         currentPackageName = newPkg
         currentFriendlyAppName = appMap[newPkg] ?: newPkg.split(".").last().replaceFirstChar { it.uppercase() }
         sessionStartTime = System.currentTimeMillis()
+        cumulativePausedTime = 0L
+        lastPauseTimestamp = 0L
         isSessionActive = true
         
         Log.i(TAG, "DECODER: Session Started -> $currentFriendlyAppName")
@@ -119,27 +164,47 @@ class QuestSnifferService : Service() {
             isSessionActive = false
             currentPackageName = "Oculus Home"
             currentFriendlyAppName = "Oculus Home"
-            Log.i(TAG, "DECODER: Returned to Home. Tracking Standby.")
+            Log.i(TAG, "DECODER: Session Terminated. Standby.")
             updateNotification("Monitoring VR Activity...")
         }
     }
 
     private fun syncCurrentSession(updateType: String) {
-        val durationMs = System.currentTimeMillis() - sessionStartTime
-        val durationMinutes = (durationMs / 60000).toInt().coerceAtLeast(1)
+        // Duration = Total Time - Time while headset was off
+        val now = System.currentTimeMillis()
+        val currentPauseEffect = if (lastPauseTimestamp != 0L) (now - lastPauseTimestamp) else 0L
+        val activeDurationMs = (now - sessionStartTime) - cumulativePausedTime - currentPauseEffect
+        
+        val durationMinutes = (activeDurationMs / 60000).toInt().coerceAtLeast(0)
         
         val activity = QuestActivityEntity(
             durationMinutes = durationMinutes,
-            caloriesBurned = 0, // Calories now calculated server-side based on duration
-            timestamp = System.currentTimeMillis(),
+            caloriesBurned = 0,
+            timestamp = now,
             activityName = "$currentFriendlyAppName ($updateType)"
         )
         
-        Log.d(TAG, "DECODER SYNC: $updateType | $currentFriendlyAppName | $durationMinutes min")
+        Log.d(TAG, "DECODER SYNC: $updateType | Active: $durationMinutes min")
         serviceScope.launch {
             repository.saveQuestRealTimeData(activity, currentPackageName, true)
         }
     }
+
+    override fun onSensorChanged(event: SensorEvent?) {
+        if (event?.sensor?.type == Sensor.TYPE_PROXIMITY) {
+            val rawValue = event.values[0]
+            val maxRange = event.sensor.maximumRange
+            val worn = rawValue < maxRange || rawValue == 0f
+            
+            if (worn != isHeadsetWorn) {
+                isHeadsetWorn = worn
+                if (!worn) lastRemovedTimestamp = System.currentTimeMillis()
+                Log.d(TAG, "DECODER: Proximity State -> Worn: $worn")
+            }
+        }
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     private fun createNotificationChannel() {
         val channel = NotificationChannel(CHANNEL_ID, "Smart VR Tracking", NotificationManager.IMPORTANCE_LOW)
@@ -149,7 +214,7 @@ class QuestSnifferService : Service() {
 
     private fun createNotification(text: String): Notification {
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("QuestSync Duration Tracker")
+            .setContentTitle("QuestSync Truthful Tracker")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_menu_recent_history)
             .setOngoing(true)
@@ -171,8 +236,8 @@ class QuestSnifferService : Service() {
         if (isSessionActive) {
             syncCurrentSession("Service Stopped")
         }
+        sensorManager.unregisterListener(this)
         serviceScope.cancel()
-        Log.d(TAG, "DECODER: Tracker Offline")
         super.onDestroy()
     }
 }
