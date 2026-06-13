@@ -7,10 +7,11 @@ import android.content.Intent
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
-import android.hardware.SensorManager
+import android.hardware.input.InputManager
 import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
+import android.view.InputDevice
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.*
 import pl.complet.QuestSync.data.DataModule
@@ -18,14 +19,13 @@ import pl.complet.QuestSync.data.local.QuestActivityEntity
 import pl.complet.QuestSync.data.repository.HealthRepository
 import java.util.Locale
 
-class QuestSnifferService : Service(), SensorEventListener {
+class QuestSnifferService : Service() {
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private lateinit var repository: HealthRepository
     private lateinit var usageStatsManager: UsageStatsManager
-    private lateinit var sensorManager: SensorManager
     private lateinit var powerManager: PowerManager
-    private var proximitySensor: Sensor? = null
+    private lateinit var inputManager: InputManager
 
     private var sessionStartTime = 0L
     private var cumulativePausedTime = 0L
@@ -35,14 +35,14 @@ class QuestSnifferService : Service(), SensorEventListener {
     private var currentFriendlyAppName = "VR Session"
     private var isSessionActive = false
     
-    private var isHeadsetWorn = false
-    private var lastRemovedTimestamp = 0L
+    private var isLeftControllerConnected = false
+    private var isRightControllerConnected = false
+    private var lastControllersActiveTimestamp = 0L
 
     private val appMap = mapOf(
         "com.beatgames.beatsaber" to "Beat Saber",
         "com.cloudheadgames.pistolwhip" to "Pistol Whip",
         "com.synthriders.quest" to "Synth Riders",
-        "com.superhotgame.superhot" to "Superhot VR",
         "com.fitxr.fitxr" to "FitXR",
         "com.oculus.vrshell" to "Oculus Home",
         "com.funnyvg.totaleasy" to "Les Mills Bodycombat",
@@ -57,22 +57,17 @@ class QuestSnifferService : Service(), SensorEventListener {
         private const val TAG = "QuestSnifferService"
         private const val TRACKING_INTERVAL_MS = 15000L
         private const val SYNC_INTERVAL_MS = 30000L
-        private const val AUTO_FINALIZE_TIMEOUT_MS = 60000L // 60s removal = end session
+        private const val AUTO_FINALIZE_TIMEOUT_MS = 60000L 
     }
 
     override fun onCreate() {
         super.onCreate()
-        Log.d(TAG, "DECODER: Initializing Truthful Headset Tracking v2")
+        Log.d(TAG, "DECODER: Initializing Controller-Based Tracking")
         repository = DataModule.provideHealthRepository(this)
         usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
         powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        inputManager = getSystemService(Context.INPUT_SERVICE) as InputManager
         
-        proximitySensor = sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY)
-        proximitySensor?.let {
-            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL)
-        }
-
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification("Monitoring VR Activity..."))
 
@@ -84,17 +79,17 @@ class QuestSnifferService : Service(), SensorEventListener {
             var lastSyncTime = System.currentTimeMillis()
             
             while (isActive) {
+                checkControllers()
                 val isInteractive = powerManager.isInteractive
                 
-                // Effective Worn State: Proximity says Near AND Screen is ON
-                val effectivelyWorn = isHeadsetWorn && isInteractive
+                // Effective Worn State: Both controllers connected AND Screen is ON
+                val effectivelyActive = isLeftControllerConnected && isRightControllerConnected && isInteractive
                 
-                if (effectivelyWorn) {
+                if (effectivelyActive) {
                     if (lastPauseTimestamp != 0L) {
-                        // Resumed tracking
                         cumulativePausedTime += (System.currentTimeMillis() - lastPauseTimestamp)
                         lastPauseTimestamp = 0L
-                        Log.d(TAG, "DECODER: Tracking Resumed")
+                        Log.d(TAG, "DECODER: Tracking Resumed (Controllers Linked)")
                     }
                     
                     detectForegroundApp()
@@ -103,19 +98,18 @@ class QuestSnifferService : Service(), SensorEventListener {
                         syncCurrentSession("Live Update", true)
                         lastSyncTime = System.currentTimeMillis()
                     }
+                    lastControllersActiveTimestamp = System.currentTimeMillis()
                 } else {
                     if (lastPauseTimestamp == 0L) {
                         lastPauseTimestamp = System.currentTimeMillis()
-                        Log.d(TAG, "DECODER: Tracking Paused (effectivelyWorn=false, isWorn=$isHeadsetWorn, isInteractive=$isInteractive)")
-                        // Send one final packet to server indicating pause
+                        Log.d(TAG, "DECODER: Tracking Paused (Missing Controllers or Sleep)")
                         if (isSessionActive) {
                             syncCurrentSession("Paused", false)
                         }
                     }
                     
-                    // Auto-finalize logic: if removed for too long, reset session
-                    if (isSessionActive && System.currentTimeMillis() - lastRemovedTimestamp > AUTO_FINALIZE_TIMEOUT_MS && !isHeadsetWorn) {
-                        Log.i(TAG, "DECODER: Auto-finalizing session due to prolonged inactivity")
+                    if (isSessionActive && System.currentTimeMillis() - lastControllersActiveTimestamp > AUTO_FINALIZE_TIMEOUT_MS) {
+                        Log.i(TAG, "DECODER: Auto-finalizing session due to controller disconnect")
                         handleReturnToHome()
                     }
                 }
@@ -123,6 +117,26 @@ class QuestSnifferService : Service(), SensorEventListener {
                 delay(TRACKING_INTERVAL_MS)
             }
         }
+    }
+
+    private fun checkControllers() {
+        var left = false
+        var right = false
+        
+        val deviceIds = inputManager.inputDeviceIds
+        for (id in deviceIds) {
+            val device = inputManager.getInputDevice(id) ?: continue
+            val name = device.name.lowercase()
+            // Generic detection for Quest controllers
+            if (name.contains("oculus") || name.contains("meta") || name.contains("controller")) {
+                if (name.contains("left")) left = true
+                if (name.contains("right")) right = true
+            }
+        }
+        
+        isLeftControllerConnected = left
+        isRightControllerConnected = right
+        Log.d(TAG, "DECODER: Controllers connected: Left=$isLeftControllerConnected, Right=$isRightControllerConnected")
     }
 
     private fun detectForegroundApp() {
@@ -150,7 +164,7 @@ class QuestSnifferService : Service(), SensorEventListener {
 
     private fun handleAppSwitch(newPkg: String) {
         if (isSessionActive) {
-            syncCurrentSession("Session Finalized", isHeadsetWorn && powerManager.isInteractive)
+            syncCurrentSession("Session Finalized", isLeftControllerConnected && isRightControllerConnected && powerManager.isInteractive)
         }
         
         currentPackageName = newPkg
@@ -176,7 +190,6 @@ class QuestSnifferService : Service(), SensorEventListener {
     }
 
     private fun syncCurrentSession(updateType: String, effectivelyWorn: Boolean) {
-        // Duration = Total Time - Time while headset was off
         val now = System.currentTimeMillis()
         val currentPauseEffect = if (lastPauseTimestamp != 0L) (now - lastPauseTimestamp) else 0L
         val activeDurationMs = (now - sessionStartTime) - cumulativePausedTime - currentPauseEffect
@@ -190,27 +203,11 @@ class QuestSnifferService : Service(), SensorEventListener {
             activityName = "$currentFriendlyAppName ($updateType)"
         )
         
-        Log.d(TAG, "DECODER SENDING: $currentFriendlyAppName | Worn: $effectivelyWorn | Duration: $durationMinutes min")
+        Log.d(TAG, "DECODER SENDING: $currentFriendlyAppName | Active: $durationMinutes min")
         serviceScope.launch {
             repository.saveQuestRealTimeData(activity, currentPackageName, effectivelyWorn)
         }
     }
-
-    override fun onSensorChanged(event: SensorEvent?) {
-        if (event?.sensor?.type == Sensor.TYPE_PROXIMITY) {
-            val rawValue = event.values[0]
-            val maxRange = event.sensor.maximumRange
-            val worn = rawValue < maxRange || rawValue == 0f
-            
-            if (worn != isHeadsetWorn) {
-                isHeadsetWorn = worn
-                if (!worn) lastRemovedTimestamp = System.currentTimeMillis()
-                Log.d(TAG, "DECODER: Proximity Sensor State -> Worn: $worn")
-            }
-        }
-    }
-
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     private fun createNotificationChannel() {
         val channel = NotificationChannel(CHANNEL_ID, "Smart VR Tracking", NotificationManager.IMPORTANCE_LOW)
@@ -242,7 +239,6 @@ class QuestSnifferService : Service(), SensorEventListener {
         if (isSessionActive) {
             syncCurrentSession("Service Stopped", false)
         }
-        sensorManager.unregisterListener(this)
         serviceScope.cancel()
         super.onDestroy()
     }

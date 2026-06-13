@@ -82,6 +82,39 @@ async def sync_health_connect(request: Request):
         print(f"❌ [SYNC ERROR] {e}")
         return Response(content=str(e), status_code=400)
 
+@app.get("/api/history/{source}")
+async def get_api_history(source: str):
+    """
+    Rest API optimized for Dashboard Sparklines.
+    Returns a simple array of numeric values from the last 7 days.
+    """
+    try:
+        # Fetch last 50 records
+        history = token_store.get_health_history(source)
+
+        values = []
+        for entry in history:
+            payload = entry.get("payload", {})
+            data = payload.get("data", payload)
+
+            val = 0.0
+            if source == "quest":
+                val = float(data.get("durationMinutes", 0))
+            elif source == "oura":
+                val = float(data.get("readiness_score", 0))
+            elif source == "samsung_health":
+                val = float(data.get("stepCount", 0))
+            elif source == "withings":
+                val = float(data.get("weight_kg", 0))
+
+            values.append(val)
+
+        # Limit to 7 most recent distinct days/entries for sparkline
+        return values[:7][::-1] # Reverse to chronological order
+    except Exception as e:
+        print(f"❌ API Error: {e}")
+        return []
+
 @app.get("/status")
 async def status():
     return {

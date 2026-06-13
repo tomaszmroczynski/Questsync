@@ -12,6 +12,8 @@ import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import pl.complet.QuestSync.BuildConfig
 
+import io.ktor.client.call.*
+
 class HealthRepository(
     private val healthDao: HealthDao,
     private val ouraApi: OuraApi,
@@ -118,6 +120,73 @@ class HealthRepository(
     
     suspend fun saveSamsungMetrics(metrics: SamsungHealthMetricsEntity) {
         healthDao.insertSamsungMetrics(metrics)
+    }
+
+    suspend fun refreshHistoryFromServer() {
+        if (BuildConfig.MCP_SERVER_URL.isEmpty()) return
+        
+        val baseUrl = BuildConfig.MCP_SERVER_URL.trimEnd('/').substringBeforeLast("/mcp")
+        val sources = listOf("quest", "oura", "samsung_health", "withings")
+        
+        sources.forEach { source ->
+            try {
+                val historyUrl = "$baseUrl/api/history/$source"
+                val response: List<Float> = httpClient.get(historyUrl).body()
+                
+                // Convert simple numeric list back to entities for sparklines
+                // Note: This is a simplified mapping to populate the UI trends
+                when (source) {
+                    "quest" -> {
+                        val entities = response.mapIndexed { i, val_ ->
+                            QuestActivityEntity(
+                                id = i + 1000, // Offset to avoid collisions
+                                durationMinutes = val_.toInt(),
+                                caloriesBurned = 0,
+                                timestamp = System.currentTimeMillis() - (response.size - i) * 86400000L,
+                                activityName = "Historical Session"
+                            )
+                        }
+                        healthDao.insertQuestActivities(entities)
+                    }
+                    "oura" -> {
+                        val entities = response.mapIndexed { i, val_ ->
+                            OuraMetricsEntity(
+                                timestamp = System.currentTimeMillis() - (response.size - i) * 86400000L,
+                                sleepDurationHours = 8.0,
+                                readinessScore = val_.toInt(),
+                                averageHrv = 50.0
+                            )
+                        }
+                        healthDao.insertOuraMetricsList(entities)
+                    }
+                    "samsung_health" -> {
+                        val entities = response.mapIndexed { i, val_ ->
+                            SamsungHealthMetricsEntity(
+                                timestamp = System.currentTimeMillis() - (response.size - i) * 86400000L,
+                                stepCount = val_.toInt(),
+                                activeMinutes = 30,
+                                heartRateAverage = 70
+                            )
+                        }
+                        healthDao.insertSamsungMetricsList(entities)
+                    }
+                    "withings" -> {
+                        val entities = response.mapIndexed { i, val_ ->
+                            WithingsMetricsEntity(
+                                timestamp = System.currentTimeMillis() - (response.size - i) * 86400000L,
+                                weightKg = val_.toDouble(),
+                                bodyFatPercentage = 20.0,
+                                bloodPressureSystolic = 120,
+                                bloodPressureDiastolic = 80
+                            )
+                        }
+                        healthDao.insertWithingsMetricsList(entities)
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("HealthRepository", "Failed to refresh history for $source", e)
+            }
+        }
     }
 
     fun getQuestTrend(days: Int): Flow<List<QuestActivityEntity>> {

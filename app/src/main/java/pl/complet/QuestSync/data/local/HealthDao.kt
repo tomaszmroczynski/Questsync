@@ -29,6 +29,18 @@ interface HealthDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSamsungMetrics(metrics: SamsungHealthMetricsEntity)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertQuestActivities(activities: List<QuestActivityEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertOuraMetricsList(metrics: List<OuraMetricsEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSamsungMetricsList(metrics: List<SamsungHealthMetricsEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertWithingsMetricsList(metrics: List<WithingsMetricsEntity>)
+
     @Query("SELECT * FROM samsung_health_metrics ORDER BY timestamp DESC LIMIT 1")
     fun getLatestSamsungMetrics(): Flow<SamsungHealthMetricsEntity?>
 

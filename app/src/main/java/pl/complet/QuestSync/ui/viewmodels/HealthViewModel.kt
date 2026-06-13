@@ -32,6 +32,12 @@ class HealthViewModel(private val repository: HealthRepository) : ViewModel() {
     val samsungTrend = repository.getSamsungTrend(7)
     val withingsTrend = repository.getWithingsTrend(7)
 
+    init {
+        viewModelScope.launch {
+            repository.refreshHistoryFromServer()
+        }
+    }
+
     fun toggleSniffer(context: Context) {
         val intent = Intent(context, pl.complet.QuestSync.service.QuestSnifferService::class.java)
         if (_snifferActive.value) {
