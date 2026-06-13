@@ -132,11 +132,29 @@ class QuestSnifferService : Service(), SensorEventListener {
 
     private fun detectForegroundApp() {
         val time = System.currentTimeMillis()
-        // Query last 2 minutes
-        val stats = usageStatsManager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, time - 120000, time)
+        // Query last 5 minutes to ensure we don't miss anything due to time drift
+        val stats = usageStatsManager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, time - 300000, time)
         if (!stats.isNullOrEmpty()) {
-            val lastApp = stats.maxByOrNull { it.lastTimeUsed }
-            lastApp?.packageName?.let { pkg ->
+            // Sort by lastTimeUsed to get the actual current apps
+            val sortedStats = stats.sortedByDescending { it.lastTimeUsed }
+            
+            // Print top 5 apps for debugging
+            Log.d(TAG, "DECODER: Top 5 Active Apps:")
+            sortedStats.take(5).forEach { stat ->
+                Log.d(TAG, "  - ${stat.packageName} (Last used: ${stat.lastTimeUsed})")
+            }
+
+            // Find the first app that isn't a known system shell/home
+            val activeApp = sortedStats.firstOrNull { stat ->
+                val pkg = stat.packageName
+                pkg != "com.oculus.vrshell" && 
+                pkg != "com.oculus.shell" && 
+                pkg != "android" && 
+                pkg != "com.android.settings" &&
+                pkg != packageName // Ignore QuestSync itself
+            }
+
+            activeApp?.packageName?.let { pkg ->
                 if (pkg != currentPackageName) {
                     currentPackageName = pkg
                     currentFriendlyAppName = appMap[pkg] ?: pkg.split(".").last().replaceFirstChar { it.uppercase() }
