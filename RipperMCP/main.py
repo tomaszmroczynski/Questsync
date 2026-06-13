@@ -63,13 +63,18 @@ async def sync_health_connect(request: Request):
         data_type = data.get("type", "generic")
         payload = data.get("data", data)
 
-        print(f"📥 [SYNC] Source: {source}, Type: {data_type}, Keys: {list(payload.keys()) if isinstance(payload, dict) else 'raw'}")
+        print(f"📥 [SYNC] Source: {source}, Type: {data_type}")
+
+        # LOG RAW PAYLOAD IF SOURCE IS UNKNOWN
+        if source == "quest" and (payload.get("packageName") == "Unknown" or payload.get("caloriesBurned") == 0):
+            print(f"🔍 [DEBUG RAW] Received: {json.dumps(data, indent=2)}")
 
         token_store.save_health_data(source, payload, data_type)
 
         if source == "quest":
             calories = payload.get("caloriesBurned", 0)
-            print(f"⚡ [QUEST SNIFFER] Saved: {payload.get('activityName')} - {calories} kcal")
+            pkg = payload.get("packageName", "unknown")
+            print(f"⚡ [QUEST SNIFFER] Saved: {payload.get('activityName')} | pkg: {pkg} | {calories} kcal")
 
         return {"status": "success"}
     except Exception as e:
@@ -88,27 +93,29 @@ async def status():
 async def mcp_sse(request: Request):
     print(f"📡 New SSE connection request from {request.client.host}")
     async def event_stream() -> AsyncGenerator[str, None]:
-        # 1. SEND PADDING (4KB) to force proxy (Cloudflare/Nginx) to flush buffer
-        # Most proxies have a buffer size like 4KB. Sending this many comments
-        # forces them to transmit the stream start to the client immediately.
-        padding = ":" + " " * 4096 + "\n\n"
+        # 1. SEND PADDING (8KB) to force buffer flush on Cloudflare/Nginx
+        padding = ":" + " " * 8192 + "\n\n"
         yield padding
 
         # 2. SEND KEEP-ALIVE COMMENT
         yield ": keep-alive\n\n"
 
         # 3. SEND ENDPOINT EVENT
-        # Construct the external URL. Hyphenated domain is strictly used here.
+        # Explicit absolute URL with hyphenated domain as primary fallback
         host = request.headers.get("host", "ripper-mcp.complet-ai.no")
         scheme = request.headers.get("x-forwarded-proto", "https")
         endpoint_url = f"{scheme}://{host}/mcp"
 
-        print(f"🔗 Sending endpoint event: {endpoint_url}")
+        # Override to strict target domain to avoid proxy header confusion
+        if "complet-ai.no" in host:
+             endpoint_url = "https://ripper-mcp.complet-ai.no/mcp"
+
+        print(f"🔗 Broadcasting endpoint: {endpoint_url}")
         yield f"event: endpoint\ndata: {endpoint_url}\n\n"
 
         # 4. SEND INITIAL CAPABILITIES
         capabilities = mcp_server.get_capabilities()
-        print(f"📤 Sending initial capabilities: {capabilities}")
+        print(f"📤 Initializing handshake: {capabilities}")
         yield mcp_server.format_sse(capabilities)
 
         # 5. ENTER HEARTBEAT & MESSAGE LOOP

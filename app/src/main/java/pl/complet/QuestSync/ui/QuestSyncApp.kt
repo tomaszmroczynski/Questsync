@@ -45,7 +45,7 @@ fun QuestSyncApp() {
 
             NavDisplay(
                 backStack = backStack,
-                onBack = { backStack.removeAt(backStack.size - 1) },
+                onBack = { if (backStack.size > 1) backStack.removeAt(backStack.size - 1) },
                 sceneStrategy = listDetailStrategy,
                 entryProvider = entryProvider {
                     entry<Destination.Dashboard>(

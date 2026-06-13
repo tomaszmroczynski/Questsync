@@ -1,21 +1,31 @@
 package pl.complet.QuestSync.ui.screens
 
+import android.app.AppOpsManager
+import android.content.Context
+import android.os.Process
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import pl.complet.QuestSync.data.local.QuestActivityEntity
+import pl.complet.QuestSync.ui.components.CyberContainer
+import pl.complet.QuestSync.ui.components.CyberHeader
 import pl.complet.QuestSync.ui.viewmodels.HealthViewModel
+import pl.complet.QuestSync.ui.theme.CyberBlack
+import pl.complet.QuestSync.ui.theme.RipperGold
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,205 +41,269 @@ fun DashboardScreen(
     val latestSamsung by viewModel.latestSamsungMetrics.collectAsStateWithLifecycle(initialValue = null)
     val snifferActive by viewModel.snifferActive.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
+    
+    val hasUsageAccess = remember { mutableStateOf(checkUsageStatsPermission(context)) }
 
-    Scaffold(
-        topBar = {
-            LargeTopAppBar(
-                title = { 
-                    Column {
-                        Text("QuestSync Dashboard", fontWeight = FontWeight.Bold)
-                        if (snifferActive) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Surface(
-                                    color = MaterialTheme.colorScheme.primary,
-                                    shape = androidx.compose.foundation.shape.CircleShape,
-                                    modifier = Modifier.size(8.dp)
-                                ) {}
-                                Spacer(Modifier.width(4.dp))
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(CyberBlack)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            RipperGold.copy(alpha = 0.05f),
+                            Color.Transparent
+                        ),
+                        radius = 1000f
+                    )
+                )
+        )
+
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                CenterAlignedTopAppBar(
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = Color.Transparent,
+                        titleContentColor = RipperGold
+                    ),
+                    title = {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                "QUESTSYNC // RI-PPER",
+                                fontWeight = FontWeight.Black,
+                                letterSpacing = 4.sp,
+                                style = MaterialTheme.typography.titleLarge
+                            )
+                            if (snifferActive) {
                                 Text(
-                                    "LIVE VR Sync Active", 
+                                    "LIVE TELEMETRY ACTIVE",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary
+                                    color = MaterialTheme.colorScheme.primary,
+                                    letterSpacing = 1.sp
+                                )
+                            }
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { 
+                            viewModel.toggleSniffer(context)
+                            hasUsageAccess.value = checkUsageStatsPermission(context)
+                        }) {
+                            Icon(
+                                if (snifferActive) Icons.Rounded.StopCircle else Icons.Rounded.PlayCircle,
+                                contentDescription = "Toggle Sniffer",
+                                tint = if (snifferActive) MaterialTheme.colorScheme.error else RipperGold
+                            )
+                        }
+                    }
+                )
+            }
+        ) { innerPadding ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+                contentPadding = PaddingValues(24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                if (snifferActive && !hasUsageAccess.value) {
+                    item {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                        ) {
+                            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Rounded.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                                Spacer(Modifier.width(12.dp))
+                                Text(
+                                    "USAGE ACCESS MISSING: Cannot detect VR apps. Enable in Quest Settings.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
                                 )
                             }
                         }
                     }
-                },
-                actions = {
-                    IconButton(onClick = { viewModel.toggleSniffer(context) }) {
-                        Icon(
-                            if (snifferActive) Icons.Rounded.StopCircle else Icons.Rounded.PlayCircle,
-                            contentDescription = "Toggle Sniffer",
-                            tint = if (snifferActive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    IconButton(onClick = { viewModel.syncAll() }) {
-                        Icon(Icons.Rounded.Refresh, contentDescription = "Sync All")
-                    }
                 }
-            )
-        }
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // AI Insights Hero Section
-            item {
-                Card(
-                    onClick = onNavigateToAI,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(24.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                "AI Health Insights",
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                "See how VR workouts affect your recovery.",
-                                style = MaterialTheme.typography.bodyMedium
+
+                item {
+                    CyberContainer(onClick = onNavigateToAI) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "NEURAL INSIGHTS",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = RipperGold,
+                                    letterSpacing = 2.sp
+                                )
+                                Text(
+                                    "BIO-ANALYSIS",
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+                            Icon(
+                                Icons.Rounded.Memory,
+                                contentDescription = null,
+                                modifier = Modifier.size(40.dp),
+                                tint = RipperGold
                             )
                         }
-                        Icon(
-                            Icons.Rounded.AutoAwesome,
-                            contentDescription = null,
-                            modifier = Modifier.size(48.dp)
+                    }
+                }
+
+                item { CyberHeader("Telemetry Modules") }
+
+                item {
+                    CyberMetricCard(
+                        title = "VR ACTIVITY",
+                        value = "${questActivities.sumOf { it.durationMinutes }} MIN",
+                        subtitle = "SESSIONS: ${questActivities.size}",
+                        icon = Icons.Rounded.Hub,
+                        onClick = onNavigateToQuest
+                    )
+                }
+
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        CyberMetricCard(
+                            title = "OURA",
+                            value = "${latestOura?.readinessScore ?: "--"}",
+                            subtitle = "READINESS",
+                            icon = Icons.Rounded.Grain,
+                            modifier = Modifier.weight(1f),
+                            onClick = onNavigateToHealth
+                        )
+                        CyberMetricCard(
+                            title = "SAMSUNG",
+                            value = "${latestSamsung?.stepCount ?: "--"}",
+                            subtitle = "STEPS",
+                            icon = Icons.Rounded.Bolt,
+                            modifier = Modifier.weight(1f),
+                            onClick = onNavigateToHealth
                         )
                     }
                 }
-            }
 
-            item {
-                Text(
-                    "Unified Metrics",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-            }
-
-            // Quest Activity Card
-            item {
-                MetricCard(
-                    title = "Quest Activity",
-                    value = "${questActivities.sumOf { it.durationMinutes }} min",
-                    subtitle = "${questActivities.size} workouts synced",
-                    icon = Icons.Rounded.Vrpano,
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    onClick = onNavigateToQuest
-                )
-            }
-
-            // Health Sources Row
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    MetricCard(
-                        title = "Oura Sleep",
-                        value = "${latestOura?.sleepDurationHours?.let { "%.1f".format(it) } ?: "--"}h",
-                        subtitle = "Readiness: ${latestOura?.readinessScore ?: "--"}",
-                        icon = Icons.Rounded.Bedtime,
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                        modifier = Modifier.weight(1f),
-                        onClick = onNavigateToHealth
-                    )
-                    MetricCard(
-                        title = "Samsung",
-                        value = "${latestSamsung?.stepCount ?: "--"}",
-                        subtitle = "Steps today",
-                        icon = Icons.Rounded.DirectionsWalk,
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        modifier = Modifier.weight(1f),
+                item {
+                    CyberMetricCard(
+                        title = "BIOMETRICS",
+                        value = "${latestWithings?.weightKg ?: "--"} KG",
+                        subtitle = "WITHINGS CORE",
+                        icon = Icons.Rounded.SettingsInputComponent,
                         onClick = onNavigateToHealth
                     )
                 }
-            }
 
-            // Withings Card
-            item {
-                MetricCard(
-                    title = "Withings Health",
-                    value = "${latestWithings?.weightKg ?: "--"} kg",
-                    subtitle = "BP: ${latestWithings?.bloodPressureSystolic ?: "--"}/${latestWithings?.bloodPressureDiastolic ?: "--"}",
-                    icon = Icons.Rounded.MonitorWeight,
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    onClick = onNavigateToHealth
-                )
-            }
+                item { CyberHeader("Recent Data Stream") }
 
-            item {
-                Text(
-                    "Recent Workouts",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-            }
-
-            items(questActivities.take(3)) { activity ->
-                WorkoutItem(activity)
+                items(questActivities.take(5)) { activity ->
+                    CyberWorkoutItem(activity)
+                }
             }
         }
     }
 }
 
+private fun checkUsageStatsPermission(context: Context): Boolean {
+    val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+    val mode = appOps.unsafeCheckOpNoThrow(
+        AppOpsManager.OPSTR_GET_USAGE_STATS,
+        Process.myUid(),
+        context.packageName
+    )
+    return mode == AppOpsManager.MODE_ALLOWED
+}
+
 @Composable
-fun MetricCard(
+fun CyberMetricCard(
     title: String,
     value: String,
     subtitle: String,
     icon: ImageVector,
-    color: androidx.compose.ui.graphics.Color,
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    Card(
-        onClick = onClick,
+    CyberContainer(
         modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = color)
+        onClick = onClick
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(32.dp))
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text(title, style = MaterialTheme.typography.titleSmall)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top
+        ) {
+            Column {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = RipperGold,
+                    letterSpacing = 1.sp
+                )
+                Text(
+                    value,
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White
+                )
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Gray
+                )
+            }
+            Icon(
+                icon,
+                contentDescription = null,
+                modifier = Modifier.size(24.dp),
+                tint = RipperGold
+            )
         }
     }
 }
 
 @Composable
-fun WorkoutItem(activity: QuestActivityEntity) {
-    ListItem(
-        headlineContent = { Text(activity.activityName) },
-        supportingContent = { Text("${activity.durationMinutes} min • ${activity.caloriesBurned} kcal") },
-        leadingContent = {
+fun CyberWorkoutItem(activity: QuestActivityEntity) {
+    CyberContainer(modifier = Modifier.padding(vertical = 4.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Icon(
-                Icons.Rounded.FitnessCenter,
+                Icons.Rounded.Terminal,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
+                tint = RipperGold,
+                modifier = Modifier.size(20.dp)
             )
-        },
-        trailingContent = {
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    activity.activityName.uppercase(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Text(
+                    "${activity.durationMinutes}M // ${activity.caloriesBurned}KCAL",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = RipperGold
+                )
+            }
             Text(
-                java.text.SimpleDateFormat("MMM dd", java.util.Locale.getDefault()).format(java.util.Date(activity.timestamp)),
-                style = MaterialTheme.typography.labelSmall
+                java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(activity.timestamp)),
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.DarkGray
             )
         }
-    )
+    }
 }

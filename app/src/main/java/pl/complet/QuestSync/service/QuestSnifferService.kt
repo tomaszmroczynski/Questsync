@@ -42,7 +42,8 @@ class QuestSnifferService : Service(), SensorEventListener {
         "com.oculus.vrshell" to "Oculus Home",
         "com.funnyvg.totaleasy" to "Les Mills Bodycombat",
         "com.welltory.welltory" to "Welltory",
-        "com.samsung.android.app.shealth" to "Samsung Health"
+        "com.samsung.android.app.shealth" to "Samsung Health",
+        "com.fyian.TheThrillOfTheFight" to "Thrill of the Fight"
     )
 
     companion object {
@@ -55,7 +56,7 @@ class QuestSnifferService : Service(), SensorEventListener {
 
     override fun onCreate() {
         super.onCreate()
-        Log.d(TAG, "Service created with Smart Detection")
+        Log.d(TAG, "DECODER: Initializing Smart Tracker with High Frequency...")
         repository = DataModule.provideHealthRepository(this)
         usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
@@ -66,18 +67,36 @@ class QuestSnifferService : Service(), SensorEventListener {
         startTime = System.currentTimeMillis()
         
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, createNotification("Awaiting Headset Wear..."))
+        startForeground(NOTIFICATION_ID, createNotification("Smart VR Tracking Active"))
         
         proximitySensor?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL)
-        } ?: Log.e(TAG, "Proximity sensor not found!")
+            Log.d(TAG, "DECODER: Proximity listener active (Range: ${it.maximumRange})")
+        } ?: Log.e(TAG, "DECODER: Proximity sensor NOT FOUND")
+
+        // Force wear state if proximity is missing to ensure accelerometer starts
+        if (proximitySensor == null) {
+            Log.w(TAG, "DECODER: Proximity sensor missing - forcing worn state")
+            isHeadsetWorn = true
+            registerAccelerometer()
+        }
 
         startAdaptiveSyncLoop()
+    }
+
+    private fun registerAccelerometer() {
+        accelerometer?.let {
+            // Using SENSOR_DELAY_GAME for higher frequency polling
+            val success = sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
+            Log.d(TAG, "DECODER: Accelerometer registered ($success) at GAME frequency")
+        }
     }
 
     private fun startAdaptiveSyncLoop() {
         serviceScope.launch {
             while (isActive) {
+                checkUsagePermission()
+                
                 val isIdle = (System.currentTimeMillis() - lastMovementTime) > IDLE_TIMEOUT_MS
                 val delayTime = if (!isHeadsetWorn) 30000L else if (isIdle) 60000L else 5000L
                 
@@ -94,70 +113,78 @@ class QuestSnifferService : Service(), SensorEventListener {
                         activityName = currentFriendlyAppName
                     )
                     
-                    Log.d(TAG, "Syncing: $currentFriendlyAppName | Cal: ${activity.caloriesBurned} | Idle: $isIdle")
+                    Log.d(TAG, "DECODER SYNC: $currentFriendlyAppName | Cal: ${activity.caloriesBurned} | Pkg: $currentPackageName")
                     repository.saveQuestRealTimeData(activity, currentPackageName, isHeadsetWorn)
-                } else {
-                    Log.d(TAG, "Headset not worn - skip high-freq sync")
                 }
             }
         }
     }
 
+    private fun checkUsagePermission() {
+        val appOps = getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+        val mode = appOps.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), packageName)
+        if (mode != AppOpsManager.MODE_ALLOWED) {
+            Log.e(TAG, "DECODER CRITICAL: Usage Access Permission is NOT GRANTED!")
+        } else {
+            Log.d(TAG, "DECODER: Usage Access is verified")
+        }
+    }
+
     private fun detectForegroundApp() {
         val time = System.currentTimeMillis()
-        val stats = usageStatsManager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, time - 1000 * 60, time)
-        if (stats != null && stats.isNotEmpty()) {
+        // Query last 2 minutes
+        val stats = usageStatsManager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, time - 120000, time)
+        if (!stats.isNullOrEmpty()) {
             val lastApp = stats.maxByOrNull { it.lastTimeUsed }
             lastApp?.packageName?.let { pkg ->
                 if (pkg != currentPackageName) {
                     currentPackageName = pkg
-                    currentFriendlyAppName = appMap[pkg] ?: pkg.split(".").last().replaceFirstChar { 
-                        if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() 
-                    }
-                    Log.d(TAG, "New app detected: $currentFriendlyAppName")
+                    currentFriendlyAppName = appMap[pkg] ?: pkg.split(".").last().replaceFirstChar { it.uppercase() }
+                    Log.i(TAG, "DECODER: App Focus shifted to -> $currentFriendlyAppName ($pkg)")
                     updateNotification("Tracking: $currentFriendlyAppName")
                 }
             }
+        } else {
+            Log.w(TAG, "DECODER: UsageStatsManager returned NO stats. Permission might be blocked.")
         }
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
         when (event?.sensor?.type) {
             Sensor.TYPE_PROXIMITY -> {
-                val distance = event.values[0]
-                val worn = distance < (proximitySensor?.maximumRange ?: 1.0f)
+                val rawValue = event.values[0]
+                val worn = rawValue < 1.0f || rawValue <= (event.sensor.maximumRange * 0.5f)
                 if (worn != isHeadsetWorn) {
                     isHeadsetWorn = worn
                     handleHeadsetStateChange(worn)
                 }
             }
             Sensor.TYPE_LINEAR_ACCELERATION -> {
-                val magnitude = sqrt(
-                    event.values[0] * event.values[0] + 
-                    event.values[1] * event.values[1] + 
-                    event.values[2] * event.values[2]
-                )
+                val x = event.values[0]
+                val y = event.values[1]
+                val z = event.values[2]
+                val magnitude = sqrt(x * x + y * y + z * z)
                 
                 if (magnitude > IDLE_THRESHOLD) {
                     lastMovementTime = System.currentTimeMillis()
                 }
 
-                if (magnitude > 0.5) {
-                    totalCaloriesBurned += (magnitude * 0.002)
+                // Calorie Boost: multiplier increased from 0.002 to 0.01 for visibility
+                if (magnitude > 0.4) {
+                    totalCaloriesBurned += (magnitude * 0.01)
                 }
             }
         }
     }
 
     private fun handleHeadsetStateChange(worn: Boolean) {
-        Log.d(TAG, "Headset Worn: $worn")
+        Log.i(TAG, "DECODER: Headset worn state changed: $worn")
         if (worn) {
-            accelerometer?.let {
-                sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
-            }
+            registerAccelerometer()
             updateNotification("Active VR Tracking...")
         } else {
             sensorManager.unregisterListener(this, accelerometer)
+            Log.d(TAG, "DECODER: Sensors paused (Power Save)")
             updateNotification("Headset standby...")
         }
     }
@@ -165,11 +192,7 @@ class QuestSnifferService : Service(), SensorEventListener {
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     private fun createNotificationChannel() {
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            "Smart VR Tracking",
-            NotificationManager.IMPORTANCE_LOW
-        )
+        val channel = NotificationChannel(CHANNEL_ID, "Smart VR Tracking", NotificationManager.IMPORTANCE_LOW)
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(channel)
     }
@@ -185,11 +208,10 @@ class QuestSnifferService : Service(), SensorEventListener {
 
     private fun updateNotification(text: String) {
         try {
-            val notification = createNotification(text)
             val manager = getSystemService(NotificationManager::class.java)
-            manager.notify(NOTIFICATION_ID, notification)
-        } catch (e: SecurityException) {
-            Log.e(TAG, "Notification permission denied", e)
+            manager.notify(NOTIFICATION_ID, createNotification(text))
+        } catch (e: Exception) {
+            Log.e(TAG, "DECODER: Notification update failed", e)
         }
     }
 
@@ -199,5 +221,6 @@ class QuestSnifferService : Service(), SensorEventListener {
         super.onDestroy()
         sensorManager.unregisterListener(this)
         serviceScope.cancel()
+        Log.d(TAG, "DECODER: Tracking Link Severed")
     }
 }

@@ -27,13 +27,13 @@ class McpClientManager(private val serverUrl: String) {
             level = LogLevel.ALL
             logger = object : Logger {
                 override fun log(message: String) {
-                    // Log to both system and a dedicated tag for raw inspection
-                    Log.d("McpClientManager", "NETWORK: $message")
+                    // Raw network stream log for deep diagnostic
+                    Log.v("McpNetworkRaw", message)
                 }
             }
         }
         install(HttpTimeout) {
-            requestTimeoutMillis = 180000 // 3 minutes total
+            requestTimeoutMillis = 180000 
             connectTimeoutMillis = 45000
             socketTimeoutMillis = 180000
         }
@@ -42,21 +42,20 @@ class McpClientManager(private val serverUrl: String) {
     suspend fun getInsights(healthData: String): String {
         return withContext(Dispatchers.IO) {
             try {
-                Log.d("McpClientManager", "Starting insight generation. Target: $serverUrl")
+                Log.d("McpClientManager", "DECODER: Syncing with Neural Node: $serverUrl")
                 
                 val transport = SseClientTransport(httpClient, serverUrl)
                 val implementation = Implementation(name = "QuestSyncAndroid", version = "1.0.0")
                 val client = Client(implementation)
                 
-                Log.d("McpClientManager", "Connecting to SSE stream...")
+                Log.d("McpClientManager", "DECODER: Waiting for stream handshake...")
                 
-                // Extremely long timeout for the handshake. 
-                // If it fails exactly at 60s, it's the client side timing out.
+                // Allow enough time for padding and initial event parsing
                 withTimeout(90000) {
                     client.connect(transport)
                 }
                 
-                Log.d("McpClientManager", "Handshake successful! Sending analysis request...")
+                Log.d("McpClientManager", "DECODER: Link stabilized. Executing 'generate_health_summary'...")
                 
                 val result = withTimeout(120000) {
                     client.callTool(
@@ -65,7 +64,7 @@ class McpClientManager(private val serverUrl: String) {
                     )
                 }
                 
-                Log.d("McpClientManager", "Response received from AI.")
+                Log.d("McpClientManager", "DECODER: Response decrypted.")
                 
                 val contentList = result.content
                 if (contentList.isNotEmpty()) {
@@ -73,21 +72,21 @@ class McpClientManager(private val serverUrl: String) {
                     if (firstContent is TextContent) {
                         firstContent.text
                     } else {
-                        "Received non-text response: ${firstContent::class.simpleName}"
+                        "DECODER ALERT: Unexpected signal format (${firstContent::class.simpleName})"
                     }
                 } else {
-                    "AI Summary is empty."
+                    "DECODER ALERT: Neural node returned empty payload."
                 }
             } catch (e: CancellationException) {
-                Log.e("McpClientManager", "Job cancelled. State: ${e.message}", e)
-                "Timeout Error: The AI server is taking too long to respond. This usually happens if Cloudflare buffers the stream. Please ensure padding fix is applied on the server."
+                Log.e("McpClientManager", "DECODER: Link timeout or severed", e)
+                "Connection Timeout: The AI server is struggling with latency. Verify 'WebSocket' custom headers on Synology."
             } catch (e: Exception) {
-                Log.e("McpClientManager", "Connection error", e)
-                val msg = e.message ?: "Unknown error"
+                Log.e("McpClientManager", "DECODER: Critical interface failure", e)
+                val msg = e.message ?: "Unknown interference"
                 if (msg.contains("closed", ignoreCase = true)) {
-                    "Stream Closed: The connection was dropped by the server or proxy. Check your Synology Reverse Proxy WebSocket headers."
+                    "Interface Closed: The SSE stream died before handshake. This usually means Cloudflare buffered the 'endpoint' signal."
                 } else {
-                    "System Error: $msg"
+                    "Decoder Error: $msg"
                 }
             }
         }
