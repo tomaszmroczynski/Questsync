@@ -119,4 +119,24 @@ class HealthRepository(
     suspend fun saveSamsungMetrics(metrics: SamsungHealthMetricsEntity) {
         healthDao.insertSamsungMetrics(metrics)
     }
+
+    fun getQuestTrend(days: Int): Flow<List<QuestActivityEntity>> {
+        val since = System.currentTimeMillis() - (days * 24 * 60 * 60 * 1000L)
+        return healthDao.getQuestActivitiesSince(since)
+    }
+
+    fun getOuraTrend(days: Int): Flow<List<OuraMetricsEntity>> {
+        val since = System.currentTimeMillis() - (days * 24 * 60 * 60 * 1000L)
+        return healthDao.getOuraMetricsSince(since)
+    }
+
+    fun getSamsungTrend(days: Int): Flow<List<SamsungHealthMetricsEntity>> {
+        val since = System.currentTimeMillis() - (days * 24 * 60 * 60 * 1000L)
+        return healthDao.getSamsungMetricsSince(since)
+    }
+
+    fun getWithingsTrend(days: Int): Flow<List<WithingsMetricsEntity>> {
+        val since = System.currentTimeMillis() - (days * 24 * 60 * 60 * 1000L)
+        return healthDao.getWithingsMetricsSince(since)
+    }
 }

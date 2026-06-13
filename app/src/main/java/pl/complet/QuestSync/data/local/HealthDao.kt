@@ -31,4 +31,16 @@ interface HealthDao {
 
     @Query("SELECT * FROM samsung_health_metrics ORDER BY timestamp DESC LIMIT 1")
     fun getLatestSamsungMetrics(): Flow<SamsungHealthMetricsEntity?>
+
+    @Query("SELECT * FROM quest_activity WHERE timestamp >= :since ORDER BY timestamp ASC")
+    fun getQuestActivitiesSince(since: Long): Flow<List<QuestActivityEntity>>
+
+    @Query("SELECT * FROM oura_metrics WHERE timestamp >= :since ORDER BY timestamp ASC")
+    fun getOuraMetricsSince(since: Long): Flow<List<OuraMetricsEntity>>
+
+    @Query("SELECT * FROM samsung_health_metrics WHERE timestamp >= :since ORDER BY timestamp ASC")
+    fun getSamsungMetricsSince(since: Long): Flow<List<SamsungHealthMetricsEntity>>
+
+    @Query("SELECT * FROM withings_metrics WHERE timestamp >= :since ORDER BY timestamp ASC")
+    fun getWithingsMetricsSince(since: Long): Flow<List<WithingsMetricsEntity>>
 }

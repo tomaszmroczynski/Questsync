@@ -27,6 +27,11 @@ class HealthViewModel(private val repository: HealthRepository) : ViewModel() {
     private val _snifferActive = MutableStateFlow(false)
     val snifferActive: StateFlow<Boolean> = _snifferActive
 
+    val questTrend = repository.getQuestTrend(7)
+    val ouraTrend = repository.getOuraTrend(7)
+    val samsungTrend = repository.getSamsungTrend(7)
+    val withingsTrend = repository.getWithingsTrend(7)
+
     fun toggleSniffer(context: Context) {
         val intent = Intent(context, pl.complet.QuestSync.service.QuestSnifferService::class.java)
         if (_snifferActive.value) {

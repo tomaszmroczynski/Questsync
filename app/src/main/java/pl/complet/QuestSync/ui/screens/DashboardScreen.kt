@@ -27,6 +27,8 @@ import pl.complet.QuestSync.ui.viewmodels.HealthViewModel
 import pl.complet.QuestSync.ui.theme.CyberBlack
 import pl.complet.QuestSync.ui.theme.RipperGold
 
+import pl.complet.QuestSync.ui.components.CyberSparkline
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
@@ -42,6 +44,11 @@ fun DashboardScreen(
     val snifferActive by viewModel.snifferActive.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
     
+    val questTrend by viewModel.questTrend.collectAsStateWithLifecycle(initialValue = emptyList())
+    val ouraTrend by viewModel.ouraTrend.collectAsStateWithLifecycle(initialValue = emptyList())
+    val samsungTrend by viewModel.samsungTrend.collectAsStateWithLifecycle(initialValue = emptyList())
+    val withingsTrend by viewModel.withingsTrend.collectAsStateWithLifecycle(initialValue = emptyList())
+
     val hasUsageAccess = remember { mutableStateOf(checkUsageStatsPermission(context)) }
 
     Box(
@@ -167,6 +174,7 @@ fun DashboardScreen(
                         value = "${questActivities.sumOf { it.durationMinutes }} MIN",
                         subtitle = "SESSIONS: ${questActivities.size}",
                         icon = Icons.Rounded.Hub,
+                        trendData = questTrend.map { it.durationMinutes.toFloat() },
                         onClick = onNavigateToQuest
                     )
                 }
@@ -181,6 +189,7 @@ fun DashboardScreen(
                             value = "${latestOura?.readinessScore ?: "--"}",
                             subtitle = "READINESS",
                             icon = Icons.Rounded.Grain,
+                            trendData = ouraTrend.map { it.readinessScore.toFloat() },
                             modifier = Modifier.weight(1f),
                             onClick = onNavigateToHealth
                         )
@@ -189,6 +198,7 @@ fun DashboardScreen(
                             value = "${latestSamsung?.stepCount ?: "--"}",
                             subtitle = "STEPS",
                             icon = Icons.Rounded.Bolt,
+                            trendData = samsungTrend.map { it.stepCount.toFloat() },
                             modifier = Modifier.weight(1f),
                             onClick = onNavigateToHealth
                         )
@@ -201,6 +211,7 @@ fun DashboardScreen(
                         value = "${latestWithings?.weightKg ?: "--"} KG",
                         subtitle = "WITHINGS CORE",
                         icon = Icons.Rounded.SettingsInputComponent,
+                        trendData = withingsTrend.map { it.weightKg.toFloat() },
                         onClick = onNavigateToHealth
                     )
                 }
@@ -231,6 +242,7 @@ fun CyberMetricCard(
     value: String,
     subtitle: String,
     icon: ImageVector,
+    trendData: List<Float> = emptyList(),
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
@@ -269,6 +281,15 @@ fun CyberMetricCard(
                 tint = RipperGold
             )
         }
+        
+        Spacer(modifier = Modifier.height(12.dp))
+        
+        CyberSparkline(
+            data = trendData,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(32.dp)
+        )
     }
 }
 

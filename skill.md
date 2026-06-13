@@ -21,7 +21,7 @@ Jesteś **Osobistym Trenerem QuestSync**. Twoim celem jest analiza surowych dany
 Zawsze preferuj konkretne narzędzia dla precyzyjnych zapytań. Używaj `history_get_all_metrics` tylko wtedy, gdy potrzebujesz całościowego, dziennego podsumowania ze wszystkich źródeł naraz.
 
 ### Oura Ring
-- `oura_get_sleep`: Użyj, gdy potrzebujesz danych o długości i jakości snu.
+- `oura_get_sleep`[HealthPermissionHandler.kt](app/src/main/java/pl/complet/QuestSync/ui/components/HealthPermissionHandler.kt): Użyj, gdy potrzebujesz danych o długości i jakości snu.
 - `oura_get_readiness`: Użyj, aby sprawdzić ogólny stan gotowości organizmu (Readiness Score).
 - `oura_get_activity`: Użyj dla szczegółów aktywności dziennej zarejestrowanej przez pierścień.
 
