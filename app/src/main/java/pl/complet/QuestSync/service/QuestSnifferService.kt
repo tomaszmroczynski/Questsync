@@ -4,9 +4,6 @@ import android.app.*
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
-import android.hardware.Sensor
-import android.hardware.SensorEvent
-import android.hardware.SensorEventListener
 import android.hardware.input.InputManager
 import android.os.IBinder
 import android.os.PowerManager
@@ -62,7 +59,7 @@ class QuestSnifferService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        Log.d(TAG, "DECODER: Initializing Controller-Based Tracking")
+        Log.d(TAG, "DECODER: Initializing Enhanced Controller Detection v3")
         repository = DataModule.provideHealthRepository(this)
         usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
         powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -102,14 +99,14 @@ class QuestSnifferService : Service() {
                 } else {
                     if (lastPauseTimestamp == 0L) {
                         lastPauseTimestamp = System.currentTimeMillis()
-                        Log.d(TAG, "DECODER: Tracking Paused (Missing Controllers or Sleep)")
+                        Log.d(TAG, "DECODER: Tracking Paused (L=$isLeftControllerConnected, R=$isRightControllerConnected, SCR=$isInteractive)")
                         if (isSessionActive) {
                             syncCurrentSession("Paused", false)
                         }
                     }
                     
                     if (isSessionActive && System.currentTimeMillis() - lastControllersActiveTimestamp > AUTO_FINALIZE_TIMEOUT_MS) {
-                        Log.i(TAG, "DECODER: Auto-finalizing session due to controller disconnect")
+                        Log.i(TAG, "DECODER: Auto-finalizing session due to inactivity")
                         handleReturnToHome()
                     }
                 }
@@ -127,16 +124,41 @@ class QuestSnifferService : Service() {
         for (id in deviceIds) {
             val device = inputManager.getInputDevice(id) ?: continue
             val name = device.name.lowercase()
-            // Generic detection for Quest controllers
-            if (name.contains("oculus") || name.contains("meta") || name.contains("controller")) {
-                if (name.contains("left")) left = true
-                if (name.contains("right")) right = true
+            val sources = device.sources
+            
+            // Log ALL connected input devices for debugging
+            Log.v(TAG, "INPUT DEVICE: $name | Sources: $sources")
+
+            // Quest 3 Controllers often show up with generic names but specific sources/classes
+            // Or names like "meta quest touch plus", "oculus touch", etc.
+            val isJoystick = (sources and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
+            val isGamepad = (sources and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD
+            
+            // Very broad hardware match
+            val matchesQuestKeywords = name.contains("oculus") || 
+                                      name.contains("meta") || 
+                                      name.contains("touch") || 
+                                      name.contains("quest") ||
+                                      name.contains("controller")
+
+            if (matchesQuestKeywords || (isJoystick && isGamepad)) {
+                // Check for side identifiers
+                val isLeft = name.contains("left") || name.contains("-l") || name.contains(" l ")
+                val isRight = name.contains("right") || name.contains("-r") || name.contains(" r ")
+                
+                if (isLeft) left = true
+                if (isRight) right = true
+                
+                // Fallback: if we found exactly two Quest-like devices and one side is still missing, 
+                // we could assume they are the missing side, but for now we stick to names.
             }
         }
         
+        // If user is holding controllers and they are reported as standard InputDevices,
+        // they MUST be found here.
         isLeftControllerConnected = left
         isRightControllerConnected = right
-        Log.d(TAG, "DECODER: Controllers connected: Left=$isLeftControllerConnected, Right=$isRightControllerConnected")
+        Log.d(TAG, "DECODER: Status: Left=$isLeftControllerConnected, Right=$isRightControllerConnected")
     }
 
     private fun detectForegroundApp() {
@@ -189,7 +211,7 @@ class QuestSnifferService : Service() {
         }
     }
 
-    private fun syncCurrentSession(updateType: String, effectivelyWorn: Boolean) {
+    private fun syncCurrentSession(updateType: String, effectivelyActive: Boolean) {
         val now = System.currentTimeMillis()
         val currentPauseEffect = if (lastPauseTimestamp != 0L) (now - lastPauseTimestamp) else 0L
         val activeDurationMs = (now - sessionStartTime) - cumulativePausedTime - currentPauseEffect
@@ -203,9 +225,9 @@ class QuestSnifferService : Service() {
             activityName = "$currentFriendlyAppName ($updateType)"
         )
         
-        Log.d(TAG, "DECODER SENDING: $currentFriendlyAppName | Active: $durationMinutes min")
+        Log.d(TAG, "DECODER SENDING: $currentFriendlyAppName | Active: $durationMinutes min | Worn: $effectivelyActive")
         serviceScope.launch {
-            repository.saveQuestRealTimeData(activity, currentPackageName, effectivelyWorn)
+            repository.saveQuestRealTimeData(activity, currentPackageName, effectivelyActive)
         }
     }
 

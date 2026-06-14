@@ -14,7 +14,17 @@ from mcp_server import MCPServer
 
 load_dotenv()
 
+print("🚀 INITIALIZING RIPPERMCP ROUTES...")
+
 app = FastAPI(title="RipperMCP Health Server")
+
+# LOG EVERY REQUEST FOR 404 DEBUGGING
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    print(f"🌐 [REQUEST] {request.method} {request.url.path}")
+    response = await call_next(request)
+    print(f"🏁 [RESPONSE] {response.status_code}")
+    return response
 
 app.add_middleware(
     CORSMiddleware,
@@ -27,6 +37,45 @@ token_store = TokenStore()
 oura_oauth = OuraOAuth(token_store)
 withings_oauth = WithingsOAuth(token_store)
 mcp_server = MCPServer(token_store)
+
+@app.get("/api/history/{source}")
+async def get_api_history(source: str):
+    """
+    Rest API optimized for Dashboard Sparklines.
+    Returns a simple array of numeric values from the last 7 days.
+    """
+    print(f"📊 [API] Fetching history for: {source}")
+    try:
+        # Fetch last 50 records
+        history = token_store.get_health_history(source)
+
+        values = []
+        for entry in history:
+            payload = entry.get("payload", {})
+            data = payload.get("data", payload)
+
+            val = 0.0
+            if source == "quest":
+                val = float(data.get("durationMinutes", 0))
+            elif source == "oura":
+                # Handle different key naming in Oura
+                val = float(data.get("readiness_score") or data.get("readiness") or 0.0)
+            elif source == "samsung_health":
+                val = float(data.get("stepCount", 0))
+            elif source == "withings":
+                val = float(data.get("weight_kg", 0))
+
+            values.append(val)
+
+        # Limit to 7 most recent distinct entries for sparkline
+        result = values[:7][::-1]
+        print(f"📈 [API] Returning {len(result)} points for {source}")
+        return result
+    except Exception as e:
+        print(f"❌ API Error: {e}")
+        return []
+
+print("✅ HISTORY ROUTES REGISTERED: /api/history/{source}")
 
 @app.head("/auth/withings/callback")
 async def callback_withings_head():
@@ -81,39 +130,6 @@ async def sync_health_connect(request: Request):
     except Exception as e:
         print(f"❌ [SYNC ERROR] {e}")
         return Response(content=str(e), status_code=400)
-
-@app.get("/api/history/{source}")
-async def get_api_history(source: str):
-    """
-    Rest API optimized for Dashboard Sparklines.
-    Returns a simple array of numeric values from the last 7 days.
-    """
-    try:
-        # Fetch last 50 records
-        history = token_store.get_health_history(source)
-
-        values = []
-        for entry in history:
-            payload = entry.get("payload", {})
-            data = payload.get("data", payload)
-
-            val = 0.0
-            if source == "quest":
-                val = float(data.get("durationMinutes", 0))
-            elif source == "oura":
-                val = float(data.get("readiness_score", 0))
-            elif source == "samsung_health":
-                val = float(data.get("stepCount", 0))
-            elif source == "withings":
-                val = float(data.get("weight_kg", 0))
-
-            values.append(val)
-
-        # Limit to 7 most recent distinct days/entries for sparkline
-        return values[:7][::-1] # Reverse to chronological order
-    except Exception as e:
-        print(f"❌ API Error: {e}")
-        return []
 
 @app.get("/status")
 async def status():

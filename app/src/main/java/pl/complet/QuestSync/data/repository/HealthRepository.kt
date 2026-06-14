@@ -125,12 +125,23 @@ class HealthRepository(
     suspend fun refreshHistoryFromServer() {
         if (BuildConfig.MCP_SERVER_URL.isEmpty()) return
         
-        val baseUrl = BuildConfig.MCP_SERVER_URL.trimEnd('/').substringBeforeLast("/mcp")
+        // Robust URL cleanup to target the API root
+        val mcpUrl = BuildConfig.MCP_SERVER_URL.trimEnd('/')
+        val baseUrl = if (mcpUrl.endsWith("/mcp")) {
+            mcpUrl.substringBeforeLast("/mcp")
+        } else {
+            mcpUrl
+        }
+        
         val sources = listOf("quest", "oura", "samsung_health", "withings")
         
         sources.forEach { source ->
             try {
-                val historyUrl = "$baseUrl/api/history/$source"
+                // Fix potential double slashes or missing slashes
+                val cleanBase = baseUrl.trimEnd('/')
+                val historyUrl = "$cleanBase/api/history/$source"
+                android.util.Log.d("HealthRepository", "DECODER FETCHING HISTORY: $historyUrl")
+
                 val response: List<Float> = httpClient.get(historyUrl).body()
                 
                 // Convert simple numeric list back to entities for sparklines
