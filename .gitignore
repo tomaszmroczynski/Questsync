@@ -23,3 +23,6 @@ RipperMCP/__pycache__/
 app/build/
 .agent/
 .kotlin/
+
+# deploy artifact
+RipperMCP/bio-scan-deploy.zip

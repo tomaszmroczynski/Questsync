@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>QuestSync — Bio-Scan VR (Vitruvian plexus / Ripperdoc)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --ink-1000:#040506; --ink-900:#07090C; --ink-850:#0B0E13; --ink-800:#11151B;
+    --ink-700:#181D25; --graphite-500:#2E3742;
+    --mist-300:#828D9C; --mist-200:#AAB4C0; --mist-100:#D2D8E0; --paper-50:#EEF1F5;
+    --ember-200:#F6D29A; --ember-300:#F1B86A; --ember-400:#EA9A3E; --ember-500:#DD7E27; --spark:#FFD9A0;
+    --glow-ember:rgba(234,154,62,.45); --glow-spark:rgba(255,217,160,.65);
+    --thread:rgba(234,154,62,.22); --thread-faint:rgba(170,180,192,.10);
+    --border-hairline:rgba(255,255,255,.06); --border-ember:rgba(234,154,62,.42);
+    --glass:rgba(7,9,12,.55); --ease-signal:cubic-bezier(.22,.61,.36,1);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+  html,body{height:100%}
+  body{
+    background:
+      radial-gradient(58% 50% at 50% 44%, rgba(234,154,62,.12), transparent 62%),
+      linear-gradient(180deg, var(--ink-1000) 0%, var(--ink-900) 58%, #0a0c10 100%),
+      var(--ink-1000);
+    color:var(--paper-50); font-family:"Geist",system-ui,sans-serif; overflow:hidden;
+  }
+  .stage{position:relative; width:100vw; height:100vh; min-height:600px}
+  .neural{position:absolute; inset:0; width:100%; height:100%; opacity:.4}
+  .floor{position:absolute; left:0; right:0; bottom:0; height:38%;
+    background:linear-gradient(180deg, transparent, rgba(234,154,62,.05) 60%, rgba(234,154,62,.10));
+    -webkit-mask-image:linear-gradient(180deg,transparent,#000 40%);
+    mask-image:linear-gradient(180deg,transparent,#000 40%)}
+
+  .topbar{position:absolute; top:0; left:0; right:0; display:flex; justify-content:space-between;
+    align-items:center; padding:22px 34px; font-family:"Geist Mono",monospace; z-index:5}
+  .eyebrow{font-size:11px; letter-spacing:.34em; color:var(--mist-300); text-transform:uppercase}
+  .live{display:flex; align-items:center; gap:8px; font-size:11px; letter-spacing:.24em;
+    color:var(--ember-300); text-transform:uppercase}
+  .live .dot{width:7px;height:7px;border-radius:50%;background:var(--spark);
+    box-shadow:0 0 12px var(--glow-spark); animation:breath 4.2s var(--ease-signal) infinite}
+
+  /* central figure box (square, holds canvas + svg overlay sharing 720x720 coords) */
+  .figbox{position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    width:min(84vh,84vw,780px); aspect-ratio:1/1}
+  .figbox canvas, .figbox svg{position:absolute; inset:0; width:100%; height:100%}
+
+  .geo{fill:none; stroke:var(--thread); stroke-width:1}
+  .geo.dash{stroke-dasharray:3 7; stroke:var(--thread-faint)}
+  .draw{stroke-dasharray:2200; stroke-dashoffset:2200; animation:draw 2.6s var(--ease-signal) .3s forwards}
+  @keyframes draw{to{stroke-dashoffset:0}}
+
+  .ann{font-family:"Geist Mono",monospace; font-size:10px; letter-spacing:.18em; fill:var(--mist-300)}
+  .ann.gold{fill:var(--ember-300)}
+  .node-core{transform-box:fill-box;transform-origin:center;animation:breath 4.2s var(--ease-signal) infinite}
+  @keyframes breath{0%,100%{opacity:.6;transform:scale(1)}50%{opacity:1;transform:scale(1.13)}}
+  .pulse-ring{transform-box:fill-box;transform-origin:center;animation:pulse 2.6s var(--ease-signal) infinite}
+  @keyframes pulse{0%{opacity:.7;transform:scale(.5)}70%{opacity:0;transform:scale(2.6)}100%{opacity:0}}
+  .nlbl{font-family:"Geist Mono",monospace;font-size:10px;letter-spacing:.14em;fill:var(--mist-200);text-transform:uppercase}
+  .nval{font-family:"Geist Mono",monospace;font-size:16px;font-weight:500;fill:var(--paper-50)}
+  .nval.hot{fill:var(--spark)}
+
+  .panel{position:absolute; width:312px; background:var(--glass);
+    -webkit-backdrop-filter:saturate(140%) blur(14px); backdrop-filter:saturate(140%) blur(14px);
+    border:1px solid var(--border-hairline); border-radius:18px; padding:18px 18px 16px; z-index:4;
+    box-shadow:0 30px 80px -40px rgba(0,0,0,.85), inset 0 1px 0 rgba(255,255,255,.04);
+    animation:rise .8s var(--ease-signal) both}
+  @keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+  .panel.left{left:42px; top:50%; transform:translateY(-50%) perspective(900px) rotateY(7deg); animation-delay:.5s}
+  .panel.right{right:42px; top:50%; transform:translateY(-50%) perspective(900px) rotateY(-7deg); animation-delay:.65s}
+  .p-eyebrow{font-family:"Geist Mono",monospace;font-size:10px;letter-spacing:.26em;
+    color:var(--mist-300);text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+  .p-eyebrow::before{content:"";width:14px;height:1px;background:var(--ember-400)}
+
+  .vital{display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:11px 0; border-bottom:1px solid var(--border-hairline)}
+  .vital:last-child{border-bottom:0}
+  .vital .meta{display:flex;flex-direction:column;gap:2px}
+  .vital .k{font-family:"Geist Mono",monospace;font-size:10px;letter-spacing:.12em;color:var(--mist-300);text-transform:uppercase}
+  .vital .v{font-family:"Geist Mono",monospace;font-size:19px;font-weight:500;color:var(--paper-50)}
+  .vital .v small{font-size:10px;color:var(--mist-300);font-weight:400}
+  .spark{width:88px;height:30px;flex:none}
+  .spark path.line{fill:none;stroke:var(--ember-400);stroke-width:1.6;stroke-linecap:round}
+  .spark circle{fill:var(--spark)}
+
+  .coach .hd{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .coach .ring{width:32px;height:32px;border-radius:50%;border:1px solid var(--border-ember);
+    display:flex;align-items:center;justify-content:center;position:relative}
+  .coach .ring::after{content:"";width:9px;height:9px;border-radius:50%;
+    background:radial-gradient(circle,#FFD9A0,#EA9A3E);box-shadow:0 0 12px var(--glow-spark);
+    animation:breath 4.2s var(--ease-signal) infinite}
+  .coach .who{font-size:13px;font-weight:500;color:var(--paper-50)}
+  .coach .who span{display:block;font-family:"Geist Mono",monospace;font-size:9px;letter-spacing:.2em;
+    color:var(--mist-300);text-transform:uppercase;margin-top:1px}
+  .coach p{font-size:14px;line-height:1.65;color:var(--mist-100)}
+  .coach p b{color:var(--ember-200);font-weight:500}
+  .coach .cta{margin-top:14px;display:inline-flex;align-items:center;gap:8px;
+    font-family:"Geist Mono",monospace;font-size:10px;letter-spacing:.2em;text-transform:uppercase;
+    color:var(--ink-1000);background:var(--ember-500);padding:9px 14px;border-radius:10px}
+  .vrcard{margin-top:14px;padding:12px;border:1px solid var(--border-hairline);border-radius:12px;
+    background:rgba(234,154,62,.05)}
+  .vrcard .t{font-family:"Geist Mono",monospace;font-size:10px;letter-spacing:.16em;color:var(--ember-300);text-transform:uppercase}
+  .vrcard .g{font-size:14px;color:var(--paper-50);margin-top:4px;font-weight:500}
+  .vrcard .d{font-family:"Geist Mono",monospace;font-size:11px;color:var(--mist-300);margin-top:6px;display:flex;justify-content:space-between}
+
+  .hint{position:absolute;bottom:20px;left:0;right:0;text-align:center;
+    font-family:"Geist Mono",monospace;font-size:10px;letter-spacing:.22em;color:var(--mist-300);
+    text-transform:uppercase;z-index:5}
+  .hint b{color:var(--ember-300);font-weight:400}
+
+  @media (prefers-reduced-motion:reduce){*{animation:none!important}.draw{stroke-dashoffset:0}}
+  @media (max-width:1180px){.panel{width:262px}.panel.left{left:18px}.panel.right{right:18px}}
+</style>
+</head>
+<body>
+  <h2 class="sr-only">Przestrzenny dashboard QuestSync na VR: figura witruwiańska zbudowana z siatki węzłów, z punktami telemetrii oraz panelami danych i trenerem AI.</h2>
+  <div class="stage">
+    <canvas class="neural" id="nf"></canvas>
+    <div class="floor"></div>
+
+    <div class="topbar">
+      <span class="eyebrow">QuestSync · Bio-Scan</span>
+      <span class="live"><span class="dot"></span>Live · Quest 3</span>
+    </div>
+
+    <div class="figbox">
+      <canvas id="fig"></canvas>
+      <svg viewBox="0 0 720 720" role="img" aria-labelledby="vt vd">
+        <title id="vt">Figura witruwiańska z siatki węzłów</title>
+        <desc id="vd">Człowiek zbudowany z połączonych punktów, wpisany w okrąg i kwadrat, z węzłami telemetrii.</desc>
+        <defs>
+          <radialGradient id="sparkCore" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#FFD9A0"/><stop offset="55%" stop-color="#EA9A3E"/><stop offset="100%" stop-color="rgba(234,154,62,0)"/>
+          </radialGradient>
+        </defs>
+
+        <rect class="geo draw" x="140" y="110" width="440" height="470"/>
+        <circle class="geo draw" cx="360" cy="350" r="250"/>
+        <line class="geo dash" x1="360" y1="100" x2="360" y2="610"/>
+        <line class="geo dash" x1="110" y1="350" x2="610" y2="350"/>
+
+        <g class="ann">
+          <line class="geo" x1="120" y1="110" x2="132" y2="110"/>
+          <line class="geo" x1="120" y1="350" x2="132" y2="350"/>
+          <line class="geo" x1="120" y1="580" x2="132" y2="580"/>
+          <text x="108" y="296" text-anchor="end" class="ann gold">φ</text>
+          <text x="108" y="310" text-anchor="end">1.618</text>
+        </g>
+        <text x="360" y="632" text-anchor="middle" class="ann" letter-spacing="6">HOMO · MENSURA</text>
+
+        <!-- telemetry nodes + labels -->
+        <line x1="360" y1="166" x2="432" y2="120" stroke="var(--thread-faint)" stroke-width="1"/>
+        <circle cx="360" cy="166" r="7" fill="url(#sparkCore)" class="node-core"/><circle cx="360" cy="166" r="2.4" fill="var(--spark)"/>
+        <text class="nlbl" x="440" y="112">Readiness · Oura</text><text class="nval" x="440" y="132">84</text>
+
+        <circle cx="540" cy="180" r="7" fill="url(#sparkCore)" class="node-core"/><circle cx="540" cy="180" r="2.4" fill="var(--spark)"/>
+        <text class="nlbl" x="556" y="176">VR Burn · Quest</text><text class="nval" x="556" y="196">412 kcal</text>
+
+        <circle cx="334" cy="250" r="14" fill="none" stroke="var(--ember-400)" stroke-width="1" class="pulse-ring"/>
+        <circle cx="334" cy="250" r="10" fill="url(#sparkCore)" class="node-core"/><circle cx="334" cy="250" r="3.2" fill="var(--spark)"/>
+        <line x1="334" y1="250" x2="236" y2="238" stroke="var(--thread-faint)" stroke-width="1"/>
+        <text class="nlbl" x="228" y="232" text-anchor="end">Puls</text><text class="nval hot" x="228" y="252" text-anchor="end">62 bpm</text>
+
+        <circle cx="360" cy="350" r="8" fill="url(#sparkCore)" class="node-core"/><circle cx="360" cy="350" r="2.6" fill="var(--spark)"/>
+        <line x1="360" y1="350" x2="468" y2="360" stroke="var(--thread-faint)" stroke-width="1"/>
+        <text class="nlbl" x="476" y="356">Masa · Withings</text><text class="nval" x="476" y="376">78.4 kg</text>
+
+        <circle cx="452" cy="470" r="7" fill="url(#sparkCore)" class="node-core"/><circle cx="452" cy="470" r="2.4" fill="var(--spark)"/>
+        <line x1="452" y1="470" x2="520" y2="482" stroke="var(--thread-faint)" stroke-width="1"/>
+        <text class="nlbl" x="528" y="478">Kroki · Samsung</text><text class="nval" x="528" y="498">8 240</text>
+      </svg>
+    </div>
+
+    <aside class="panel left">
+      <div class="p-eyebrow">Trend 7 dni</div>
+      <div class="vital"><div class="meta"><span class="k">Puls spoczynkowy</span><span class="v">62 <small>bpm</small></span></div>
+        <svg class="spark" viewBox="0 0 88 30"><path class="line" d="M2,18 L16,16 L30,19 L44,14 L58,15 L72,11 L86,9"/><circle cx="86" cy="9" r="2.4"/></svg></div>
+      <div class="vital"><div class="meta"><span class="k">Masa ciała</span><span class="v">78.4 <small>kg</small></span></div>
+        <svg class="spark" viewBox="0 0 88 30"><path class="line" d="M2,10 L16,12 L30,11 L44,14 L58,13 L72,16 L86,18"/><circle cx="86" cy="18" r="2.4"/></svg></div>
+      <div class="vital"><div class="meta"><span class="k">Sen</span><span class="v">7.4 <small>h</small></span></div>
+        <svg class="spark" viewBox="0 0 88 30"><path class="line" d="M2,16 L16,12 L30,14 L44,10 L58,9 L72,11 L86,7"/><circle cx="86" cy="7" r="2.4"/></svg></div>
+      <div class="vital"><div class="meta"><span class="k">VR Burn / dzień</span><span class="v">412 <small>kcal</small></span></div>
+        <svg class="spark" viewBox="0 0 88 30"><path class="line" d="M2,22 L16,18 L30,20 L44,13 L58,15 L72,8 L86,6"/><circle cx="86" cy="6" r="2.4"/></svg></div>
+    </aside>
+
+    <aside class="panel right">
+      <div class="p-eyebrow">Coach</div>
+      <div class="coach">
+        <div class="hd"><div class="ring"></div><div class="who">Ripperdoc<span>Intelligence amplified</span></div></div>
+        <p>Twoje tętno spoczynkowe spada <b>trzeci dzień z rzędu</b>, a regeneracja rośnie. Ciało jest gotowe na więcej, niż dajesz mu dziś.</p>
+        <p style="margin-top:10px">Proponuję mocniejszą sesję — twój rytm sam się o nią upomina.</p>
+        <span class="cta">Zaplanuj sesję</span>
+        <div class="vrcard"><div class="t">Ostatnia sesja VR</div><div class="g">Beat Saber · Expert+</div>
+          <div class="d"><span>28 min</span><span>412 kcal</span><span>tętno 148</span></div></div>
+      </div>
+    </aside>
+
+    <div class="hint">Spójrz na węzeł, aby <b>rozwinąć</b> · Pinch, aby zaplanować</div>
+  </div>
+
+<script>
+  /* ---------- background neural field ---------- */
+  (function(){
+    var c=document.getElementById('nf'),x=c.getContext('2d'),W,H,nodes=[],raf,
+        reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+    function size(){W=c.width=innerWidth*devicePixelRatio;H=c.height=innerHeight*devicePixelRatio;build();}
+    function build(){nodes=[];var n=Math.round(W*H*0.000035/devicePixelRatio);
+      for(var i=0;i<n;i++)nodes.push({x:Math.random()*W,y:Math.random()*H,
+        vx:(Math.random()-.5)*.09*devicePixelRatio,vy:(Math.random()-.5)*.09*devicePixelRatio,spark:Math.random()<.13});}
+    function frame(){x.clearRect(0,0,W,H);
+      for(var i=0;i<nodes.length;i++){var a=nodes[i];a.x+=a.vx;a.y+=a.vy;if(a.x<0||a.x>W)a.vx*=-1;if(a.y<0||a.y>H)a.vy*=-1;}
+      for(var i=0;i<nodes.length;i++)for(var j=i+1;j<nodes.length;j++){var a=nodes[i],b=nodes[j],
+        dx=a.x-b.x,dy=a.y-b.y,d=Math.hypot(dx,dy),m=120*devicePixelRatio;
+        if(d<m){x.strokeStyle='rgba(234,154,62,'+(.07*(1-d/m))+')';x.lineWidth=1;x.beginPath();x.moveTo(a.x,a.y);x.lineTo(b.x,b.y);x.stroke();}}
+      for(var i=0;i<nodes.length;i++){var a=nodes[i];x.beginPath();x.arc(a.x,a.y,(a.spark?2:1)*devicePixelRatio,0,7);
+        x.fillStyle=a.spark?'rgba(255,217,160,.7)':'rgba(170,180,192,.26)';x.fill();}
+      if(!reduce)raf=requestAnimationFrame(frame);}
+    addEventListener('resize',function(){cancelAnimationFrame(raf);size();frame();});size();frame();
+  })();
+
+  /* ---------- VITRUVIAN PLEXUS BODY ---------- */
+  (function(){
+    var DPR=Math.min(devicePixelRatio||1,2), L=720, reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+    var fig=document.getElementById('fig'), g=fig.getContext('2d');
+    function fit(){fig.width=L*DPR;fig.height=L*DPR;g.setTransform(DPR,0,0,DPR,0,0);}
+    fit();
+
+    /* --- build silhouette mask offscreen (logical 720x720) --- */
+    var mC=document.createElement('canvas'); mC.width=L; mC.height=L; var m=mC.getContext('2d');
+    m.fillStyle='#fff'; m.strokeStyle='#fff'; m.lineJoin='round'; m.lineCap='round';
+    function seg(pts,w){m.lineWidth=w;m.beginPath();m.moveTo(pts[0][0],pts[0][1]);
+      for(var i=1;i<pts.length;i++)m.lineTo(pts[i][0],pts[i][1]);m.stroke();}
+    /* head */ m.beginPath();m.ellipse(360,166,30,34,0,0,7);m.fill();
+    /* neck */ seg([[360,196],[360,214]],30);
+    /* torso */ m.beginPath();m.moveTo(306,214);m.lineTo(414,214);m.lineTo(426,402);m.lineTo(294,402);m.closePath();m.fill();
+    /* shoulders fill */ m.beginPath();m.ellipse(360,228,72,26,0,0,7);m.fill();
+    /* arms (raised, outstretched) */ seg([[316,226],[430,196],[540,180]],26); seg([[404,226],[290,196],[180,180]],26);
+    /* hands */ m.beginPath();m.ellipse(540,180,11,11,0,0,7);m.fill(); m.beginPath();m.ellipse(180,180,11,11,0,0,7);m.fill();
+    /* pelvis */ m.beginPath();m.ellipse(360,402,66,24,0,0,7);m.fill();
+    /* legs (spread) */ seg([[392,398],[452,470],[496,560]],34); seg([[328,398],[268,470],[224,560]],34);
+    /* feet */ m.beginPath();m.ellipse(496,562,15,7,0,0,7);m.fill(); m.beginPath();m.ellipse(224,562,15,7,0,0,7);m.fill();
+    var mask=m.getImageData(0,0,L,L).data;
+    function inside(x,y){if(x<0||y<0||x>=L||y>=L)return false;return mask[((y|0)*L+(x|0))*4+3]>40;}
+
+    /* --- sample points inside the silhouette --- */
+    var P=[], tries=0, TARGET=300;
+    while(P.length<TARGET && tries<12000){tries++;
+      var px=110+Math.random()*440, py=110+Math.random()*490;
+      if(inside(px,py)){
+        var ok=true; for(var k=0;k<P.length;k++){var dx=P[k].x-px,dy=P[k].y-py; if(dx*dx+dy*dy<170){ok=false;break;}}
+        if(ok)P.push({x:px,y:py,bx:px,by:py,ph:Math.random()*6.28,sp:Math.random()<.16,r:Math.random()<.16?1.9:1.05});
+      }
+    }
+    /* telemetry anchors as guaranteed bright nodes */
+    [[360,166],[540,180],[334,250],[360,350],[452,470]].forEach(function(p){
+      P.push({x:p[0],y:p[1],bx:p[0],by:p[1],ph:Math.random()*6.28,sp:true,r:2.4,hot:true});});
+
+    /* --- precompute edges by proximity (stable plexus) --- */
+    var E=[], TH=48*48;
+    for(var i=0;i<P.length;i++)for(var j=i+1;j<P.length;j++){
+      var dx=P[i].x-P[j].x,dy=P[i].y-P[j].y,d2=dx*dx+dy*dy;
+      if(d2<TH)E.push({a:i,b:j,w:1-Math.sqrt(d2)/48});
+    }
+    E.forEach(function(e,i){e.app=i/E.length;}); /* draw-on order */
+    P.forEach(function(p,i){p.app=(i/P.length)*0.9;});
+
+    var t0=performance.now();
+    function frame(now){
+      var t=(now-t0)/1000, prog=reduce?1:Math.min(t/2.2,1);
+      g.clearRect(0,0,L,L);
+      /* node wander */
+      for(var i=0;i<P.length;i++){var p=P[i];
+        if(!reduce){p.x=p.bx+Math.sin(t*0.7+p.ph)*1.6; p.y=p.by+Math.cos(t*0.6+p.ph)*1.6;}}
+      /* edges */
+      g.lineWidth=1;
+      for(var k=0;k<E.length;k++){var e=E[k]; if(e.app>prog)continue;
+        var a=P[e.a],b=P[e.b], al=0.06+e.w*0.20;
+        g.strokeStyle='rgba(234,154,62,'+al.toFixed(3)+')';
+        g.beginPath();g.moveTo(a.x,a.y);g.lineTo(b.x,b.y);g.stroke();}
+      /* nodes */
+      for(var i=0;i<P.length;i++){var p=P[i]; if(p.app>prog)continue;
+        var pulse=p.sp?(0.55+0.45*Math.sin(t*1.6+p.ph)):0.5;
+        if(p.hot){g.fillStyle='rgba(255,217,160,'+(0.7+0.3*Math.sin(t*2+p.ph)).toFixed(3)+')';g.beginPath();g.arc(p.x,p.y,p.r+0.6,0,7);g.fill();}
+        else{g.fillStyle=p.sp?'rgba(255,217,160,'+pulse.toFixed(3)+')':'rgba(241,184,106,0.55)';
+          g.beginPath();g.arc(p.x,p.y,p.r,0,7);g.fill();}
+      }
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+    addEventListener('resize',fit);
+  })();
+</script>
+</body>
+</html>

@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>QuestSync — Bio-Scan (koncept Ripperdoc)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  /* ---- Ripperdoc tokens (z tokens/colors.css + motion.css) ---- */
+  :root{
+    --ink-1000:#040506; --ink-900:#07090C; --ink-850:#0B0E13; --ink-800:#11151B;
+    --ink-700:#181D25; --graphite-500:#2E3742;
+    --mist-300:#828D9C; --mist-200:#AAB4C0; --mist-100:#D2D8E0; --paper-50:#EEF1F5;
+    --ember-300:#F1B86A; --ember-400:#EA9A3E; --ember-500:#DD7E27; --spark:#FFD9A0;
+    --glow-ember:rgba(234,154,62,.45); --glow-spark:rgba(255,217,160,.65);
+    --thread:rgba(234,154,62,.22); --thread-faint:rgba(170,180,192,.10);
+    --border-hairline:rgba(255,255,255,.06); --border-ember:rgba(234,154,62,.42);
+    --ease-signal:cubic-bezier(.22,.61,.36,1);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:
+      radial-gradient(120% 80% at 50% 18%, rgba(234,154,62,.10), transparent 60%),
+      var(--ink-1000);
+    color:var(--paper-50); font-family:"Geist",system-ui,sans-serif;
+    display:flex; align-items:center; justify-content:center; min-height:100vh; padding:32px;
+  }
+  .stage{position:relative; width:420px; max-width:100%}
+
+  /* ---- phone frame (kontekst aplikacji Android) ---- */
+  .phone{
+    position:relative; border:1px solid var(--border-hairline); border-radius:34px;
+    background:linear-gradient(180deg,#0c0f14,var(--ink-900)); overflow:hidden;
+    box-shadow:0 40px 120px -40px rgba(0,0,0,.8), inset 0 1px 0 rgba(255,255,255,.04);
+  }
+  .neural{position:absolute; inset:0; width:100%; height:100%; opacity:.5}
+
+  /* ---- top status (mono eyebrow, wide tracking) ---- */
+  .topbar{position:relative; display:flex; align-items:center; justify-content:space-between;
+    padding:22px 24px 6px; font-family:"Geist Mono",monospace}
+  .eyebrow{font-size:10px; letter-spacing:.30em; color:var(--mist-300); text-transform:uppercase}
+  .live{display:flex; align-items:center; gap:7px; font-size:10px; letter-spacing:.22em;
+    color:var(--ember-300); text-transform:uppercase}
+  .live .dot{width:6px; height:6px; border-radius:50%; background:var(--spark);
+    box-shadow:0 0 10px var(--glow-spark); animation:breath 4.2s var(--ease-signal) infinite}
+
+  .title{position:relative; padding:4px 24px 0}
+  .title h1{font-size:21px; font-weight:500; letter-spacing:-.03em; color:var(--paper-50)}
+  .title p{font-size:12px; color:var(--mist-300); margin-top:2px}
+
+  svg.scan{display:block; width:100%; height:auto}
+
+  /* ---- contour draw-on + scan + node motion ---- */
+  .contour{
+    fill:none; stroke:var(--ember-400); stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round;
+    filter:url(#emberGlow);
+    stroke-dasharray:1400; stroke-dashoffset:1400;
+    animation:draw 2.6s var(--ease-signal) .2s forwards;
+  }
+  @keyframes draw{to{stroke-dashoffset:0}}
+
+  .scanband{animation:sweep 4.2s var(--ease-signal) infinite}
+  @keyframes sweep{0%{transform:translateY(40px);opacity:0}
+    12%{opacity:1}88%{opacity:1}100%{transform:translateY(600px);opacity:0}}
+
+  .node-core{transform-box:fill-box; transform-origin:center;
+    animation:breath 4.2s var(--ease-signal) infinite}
+  @keyframes breath{0%,100%{opacity:.6;transform:scale(1)}50%{opacity:1;transform:scale(1.12)}}
+
+  .pulse-ring{transform-box:fill-box; transform-origin:center;
+    animation:pulse 2.6s var(--ease-signal) infinite}
+  @keyframes pulse{0%{opacity:.7;transform:scale(.6)}70%{opacity:0;transform:scale(2.4)}100%{opacity:0}}
+
+  .signal{stroke-dasharray:6 120; animation:travel 1.8s linear infinite}
+  @keyframes travel{from{stroke-dashoffset:126}to{stroke-dashoffset:0}}
+
+  .lbl{font-family:"Geist Mono",monospace; font-size:9px; letter-spacing:.20em;
+    fill:var(--mist-300); text-transform:uppercase}
+  .val{font-family:"Geist Mono",monospace; font-size:18px; font-weight:500; fill:var(--paper-50)}
+  .unit{font-family:"Geist Mono",monospace; font-size:9px; fill:var(--mist-300)}
+  .val.hot{fill:var(--spark)}
+
+  .legend{position:relative; padding:6px 24px 22px; display:flex; gap:18px; flex-wrap:wrap;
+    font-family:"Geist Mono",monospace; font-size:10px; color:var(--mist-300); letter-spacing:.12em}
+  .legend span{display:flex; align-items:center; gap:7px}
+  .legend i{width:7px; height:7px; border-radius:50%; display:inline-block}
+
+  .caption{margin-top:18px; text-align:center; font-size:12px; color:var(--mist-300); letter-spacing:.02em}
+  .caption b{color:var(--ember-300); font-weight:500}
+
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none !important}
+    .contour{stroke-dashoffset:0}
+  }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div class="phone">
+      <canvas class="neural" id="nf"></canvas>
+
+      <div class="topbar">
+        <span class="eyebrow">QuestSync · Bio-Scan</span>
+        <span class="live"><span class="dot"></span>Live</span>
+      </div>
+      <div class="title">
+        <h1>Twoje ciało, wzmocnione</h1>
+        <p>Augmentacja, nie automatyzacja</p>
+      </div>
+
+      <svg class="scan" viewBox="0 0 420 600" role="img" aria-labelledby="t d">
+        <title id="t">Kontur sylwetki człowieka z węzłami telemetrii</title>
+        <desc id="d">Animowany zarys ciała z podświetlonymi punktami: gotowość, puls, masa, aktywność VR i kroki.</desc>
+
+        <defs>
+          <filter id="emberGlow" x="-40%" y="-40%" width="180%" height="180%">
+            <feGaussianBlur stdDeviation="2.2" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <radialGradient id="sparkCore" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#FFD9A0"/>
+            <stop offset="55%" stop-color="#EA9A3E"/>
+            <stop offset="100%" stop-color="rgba(234,154,62,0)"/>
+          </radialGradient>
+          <linearGradient id="scanGrad" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="rgba(255,217,160,0)"/>
+            <stop offset="50%" stop-color="rgba(255,217,160,.55)"/>
+            <stop offset="100%" stop-color="rgba(255,217,160,0)"/>
+          </linearGradient>
+        </defs>
+
+        <!-- scan band sweeping down the body -->
+        <g class="scanband">
+          <rect x="250" y="40" width="160" height="2" fill="url(#scanGrad)"/>
+          <rect x="250" y="36" width="160" height="10" fill="url(#scanGrad)" opacity=".25"/>
+        </g>
+
+        <!-- human contour (right half + mirrored left half, body group offset +180x) -->
+        <g transform="translate(70,-20)">
+          <path class="contour" d="M160,26 C182,26 194,42 194,64 C194,80 188,92 180,100 C178,110 176,114 176,120 C192,124 210,130 226,142 C234,150 240,166 242,186 C244,216 243,252 240,288 C238,314 235,334 233,352 C232,362 224,362 222,352 C219,336 217,316 214,294 C211,272 210,244 205,210 C203,194 200,184 196,178 C199,214 201,256 201,302 C203,318 205,332 201,348 C215,374 215,430 207,478 C203,510 199,558 195,600 C194,612 194,620 189,622 C178,624 172,620 172,610 C170,574 170,520 168,470 C166,430 163,390 160,352"/>
+          <path class="contour" style="animation-delay:.35s" transform="translate(320,0) scale(-1,1)" d="M160,26 C182,26 194,42 194,64 C194,80 188,92 180,100 C178,110 176,114 176,120 C192,124 210,130 226,142 C234,150 240,166 242,186 C244,216 243,252 240,288 C238,314 235,334 233,352 C232,362 224,362 222,352 C219,336 217,316 214,294 C211,272 210,244 205,210 C203,194 200,184 196,178 C199,214 201,256 201,302 C203,318 205,332 201,348 C215,374 215,430 207,478 C203,510 199,558 195,600 C194,612 194,620 189,622 C178,624 172,620 172,610 C170,574 170,520 168,470 C166,430 163,390 160,352"/>
+        </g>
+
+        <!-- ===== TELEMETRY NODES + leaders =====
+             body group offset translate(70,-20):
+             head(160,70)->(230,50) heart(140,200)->(210,180) core(160,272)->(230,252)
+             hand(228,348)->(298,328) leg(170,452)->(240,432) -->
+
+        <!-- READINESS (Oura) — head, left callout -->
+        <line class="leader" x1="230" y1="50" x2="150" y2="70" stroke="var(--thread-faint)" stroke-width="1"/>
+        <line class="signal" x1="230" y1="50" x2="150" y2="70" stroke="var(--ember-400)" stroke-width="1.2"/>
+        <circle cx="230" cy="50" r="9" fill="url(#sparkCore)" class="node-core"/>
+        <circle cx="230" cy="50" r="3" fill="var(--spark)"/>
+        <text class="lbl" x="138" y="60" text-anchor="end">Readiness · Oura</text>
+        <text class="val" x="138" y="80" text-anchor="end">84</text>
+        <text class="unit" x="138" y="93" text-anchor="end">/ 100 score</text>
+
+        <!-- PULS (Oura/Withings) — heart, hottest node, left callout -->
+        <line class="leader" x1="210" y1="180" x2="150" y2="196" stroke="var(--thread-faint)" stroke-width="1"/>
+        <line class="signal" x1="210" y1="180" x2="150" y2="196" stroke="var(--ember-400)" stroke-width="1.2"/>
+        <circle cx="210" cy="180" r="14" fill="none" stroke="var(--ember-400)" stroke-width="1" class="pulse-ring"/>
+        <circle cx="210" cy="180" r="11" fill="url(#sparkCore)" class="node-core"/>
+        <circle cx="210" cy="180" r="3.5" fill="var(--spark)"/>
+        <text class="lbl" x="138" y="186" text-anchor="end">Puls spoczynkowy</text>
+        <text class="val hot" x="138" y="206" text-anchor="end">62</text>
+        <text class="unit" x="138" y="219" text-anchor="end">bpm</text>
+
+        <!-- KROKI (Samsung) — leg, left callout -->
+        <line class="leader" x1="240" y1="432" x2="150" y2="430" stroke="var(--thread-faint)" stroke-width="1"/>
+        <line class="signal" x1="240" y1="432" x2="150" y2="430" stroke="var(--ember-400)" stroke-width="1.2"/>
+        <circle cx="240" cy="432" r="8" fill="url(#sparkCore)" class="node-core"/>
+        <circle cx="240" cy="432" r="2.6" fill="var(--spark)"/>
+        <text class="lbl" x="138" y="424" text-anchor="end">Kroki · Samsung</text>
+        <text class="val" x="138" y="444" text-anchor="end">8 240</text>
+
+        <!-- MASA (Withings) — core, right callout -->
+        <line class="leader" x1="230" y1="252" x2="300" y2="248" stroke="var(--thread-faint)" stroke-width="1"/>
+        <line class="signal" x1="230" y1="252" x2="300" y2="248" stroke="var(--ember-400)" stroke-width="1.2"/>
+        <circle cx="230" cy="252" r="9" fill="url(#sparkCore)" class="node-core"/>
+        <circle cx="230" cy="252" r="3" fill="var(--spark)"/>
+        <text class="lbl" x="312" y="244" text-anchor="start">Masa · Withings</text>
+        <text class="val" x="312" y="264" text-anchor="start">78.4</text>
+        <text class="unit" x="312" y="277" text-anchor="start">kg</text>
+
+        <!-- VR BURN (Quest) — hand, right callout -->
+        <line class="leader" x1="298" y1="328" x2="312" y2="350" stroke="var(--thread-faint)" stroke-width="1"/>
+        <line class="signal" x1="298" y1="328" x2="312" y2="350" stroke="var(--ember-400)" stroke-width="1.2"/>
+        <circle cx="298" cy="328" r="9" fill="url(#sparkCore)" class="node-core"/>
+        <circle cx="298" cy="328" r="3" fill="var(--spark)"/>
+        <text class="lbl" x="312" y="346" text-anchor="start">VR Burn · Quest</text>
+        <text class="val" x="312" y="366" text-anchor="start">412</text>
+        <text class="unit" x="312" y="379" text-anchor="start">kcal · Beat Saber</text>
+      </svg>
+
+      <div class="legend">
+        <span><i style="background:var(--spark);box-shadow:0 0 8px var(--glow-spark)"></i>Aktywny sygnał</span>
+        <span><i style="background:var(--ember-500)"></i>Augmentacja</span>
+        <span><i style="background:var(--graphite-500)"></i>Spoczynek</span>
+      </div>
+    </div>
+
+    <p class="caption">Koncept <b>Bio-Scan</b> · Ripperdoc Design System — „Human First. Intelligence Amplified."</p>
+  </div>
+
+<script>
+  // ---- neural field (drifting nodes + proximity links + warm sparks) ----
+  (function(){
+    var c=document.getElementById('nf'), x=c.getContext('2d'), W,H,nodes=[],raf;
+    var reduce=window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+    function size(){var r=c.getBoundingClientRect();W=c.width=r.width*devicePixelRatio;
+      H=c.height=r.height*devicePixelRatio;x.scale(1,1);build();}
+    function build(){nodes=[];var n=Math.round(W*H*0.00006/devicePixelRatio);
+      for(var i=0;i<n;i++)nodes.push({x:Math.random()*W,y:Math.random()*H,
+        vx:(Math.random()-.5)*.12*devicePixelRatio,vy:(Math.random()-.5)*.12*devicePixelRatio,
+        spark:Math.random()<0.16});}
+    function frame(){
+      x.clearRect(0,0,W,H);
+      for(var i=0;i<nodes.length;i++){var a=nodes[i];a.x+=a.vx;a.y+=a.vy;
+        if(a.x<0||a.x>W)a.vx*=-1; if(a.y<0||a.y>H)a.vy*=-1;}
+      for(var i=0;i<nodes.length;i++){for(var j=i+1;j<nodes.length;j++){
+        var a=nodes[i],b=nodes[j],dx=a.x-b.x,dy=a.y-b.y,d=Math.hypot(dx,dy),m=90*devicePixelRatio;
+        if(d<m){x.strokeStyle='rgba(234,154,62,'+(0.10*(1-d/m))+')';x.lineWidth=1;
+          x.beginPath();x.moveTo(a.x,a.y);x.lineTo(b.x,b.y);x.stroke();}}}
+      for(var i=0;i<nodes.length;i++){var a=nodes[i];
+        x.beginPath();x.arc(a.x,a.y,(a.spark?2.2:1.2)*devicePixelRatio,0,7);
+        x.fillStyle=a.spark?'rgba(255,217,160,.8)':'rgba(170,180,192,.32)';x.fill();}
+      if(!reduce)raf=requestAnimationFrame(frame);
+    }
+    window.addEventListener('resize',function(){cancelAnimationFrame(raf);size();if(!reduce)frame();else frame();});
+    size(); frame();
+  })();
+</script>
+</body>
+</html>

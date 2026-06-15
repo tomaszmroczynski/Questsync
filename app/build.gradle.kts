@@ -10,6 +10,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.devtools.ksp)
     alias(libs.plugins.jetbrains.kotlin.plugin.serialization)
+    alias(libs.plugins.meta.spatial.plugin)
 }
 
 android {
@@ -18,7 +19,7 @@ android {
 
     defaultConfig {
         applicationId = "pl.complet.QuestSync"
-        minSdk = 31
+        minSdk = 34
         targetSdk = 37
         versionCode = 1
         versionName = "1.0"
@@ -44,13 +45,19 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    kotlin {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        }
     }
     buildFeatures {
         compose = true
         buildConfig = true
     }
+    packaging { resources.excludes.add("META-INF/LICENSE") }
 }
 
 dependencies {
@@ -91,6 +98,11 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.play.services.location)
     implementation(libs.retrofit)
+    implementation(libs.meta.spatial.sdk)
+    implementation(libs.meta.spatial.sdk.compose)
+    implementation(libs.meta.spatial.sdk.toolkit)
+    implementation(libs.meta.spatial.sdk.vr)
+    implementation(libs.meta.spatial.sdk.physics)
     implementation(libs.mcp.client)
     implementation(libs.ktor.client.cio)
     implementation(libs.ktor.client.logging)

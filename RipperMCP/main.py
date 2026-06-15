@@ -77,6 +77,18 @@ async def get_api_history(source: str):
 
 print("✅ HISTORY ROUTES REGISTERED: /api/history/{source}")
 
+@app.get("/bio-scan")
+async def bio_scan():
+    """Serve the Bio-Scan WebXR plexus prototype for immersive viewing in Quest Browser."""
+    path = os.path.join(os.path.dirname(__file__), "static", "bio-scan-3d.html")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return HTMLResponse(f.read())
+    except FileNotFoundError:
+        return HTMLResponse("<h2>Bio-Scan asset not deployed.</h2>", status_code=404)
+
+print("✅ BIO-SCAN ROUTE REGISTERED: /bio-scan")
+
 @app.head("/auth/withings/callback")
 async def callback_withings_head():
     return Response(status_code=200)
