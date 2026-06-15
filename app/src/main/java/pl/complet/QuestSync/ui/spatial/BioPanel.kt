@@ -1,8 +1,10 @@
 package pl.complet.QuestSync.ui.spatial
 
+import android.content.Intent
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,6 +38,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -101,13 +104,17 @@ fun TaglinePanel() {
 
 private const val COACH_FALLBACK =
     "Twoje tętno spoczynkowe spada trzeci dzień z rzędu, a regeneracja rośnie. " +
-        "Ciało jest gotowe na więcej, niż dajesz mu dziś."
+        "Ciało jest gotowe na więcej. Rekomenduję intensywną sesję bokserską."
 
 @Composable
 fun CoachPanel() {
     val ctx = LocalContext.current
     var message by remember { mutableStateOf(COACH_FALLBACK) }
     var loading by remember { mutableStateOf(true) }
+    
+    // Logic for app detection (can be expanded based on AI keywords)
+    val recommendedAppPkg = "com.fyian.TheThrillOfTheFight"
+    val recommendedAppTitle = "The Thrill of the Fight"
 
     LaunchedEffect(Unit) {
         val insight = runCatching {
@@ -139,7 +146,7 @@ fun CoachPanel() {
             Column {
                 Text("Ripperdoc", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 22.sp)
                 Text(
-                    if (loading) "ANALIZUJĘ…" else "INTELLIGENCE AMPLIFIED",
+                    if (loading) "ANALIZUJĘ PROFIL…" else "NEURAL ANALYSIS COMPLETE",
                     color = EmberDim, letterSpacing = 2.sp, fontSize = 11.sp
                 )
             }
@@ -147,11 +154,62 @@ fun CoachPanel() {
 
         Text(message, color = Color(0xFFE6E8EA), fontSize = 16.sp, lineHeight = 24.sp)
 
+        Spacer(modifier = Modifier.weight(1f))
+
+        // Recommendation Context Box
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Ember.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+                .border(0.5.dp, Ember.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                "REKOMENDACJA SYSTEMOWA",
+                color = EmberDim,
+                fontSize = 10.sp,
+                letterSpacing = 2.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                recommendedAppTitle.uppercase(),
+                color = Color.White,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Black,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Cel: Maksymalizacja deficytu kalorycznego i wyrzut dopaminy.",
+                color = TextDim,
+                fontSize = 12.sp,
+                textAlign = TextAlign.Center
+            )
+        }
+
+        // Action Button
         Box(
-            Modifier.fillMaxWidth().background(Ember, RoundedCornerShape(12.dp)).padding(vertical = 16.dp),
+            Modifier
+                .fillMaxWidth()
+                .background(Ember, RoundedCornerShape(12.dp))
+                .clickable {
+                    val launchIntent = ctx.packageManager.getLaunchIntentForPackage(recommendedAppPkg)
+                    if (launchIntent != null) {
+                        ctx.startActivity(launchIntent)
+                    }
+                }
+                .padding(vertical = 16.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text("ZAPLANUJ SESJĘ", color = InkBlack, fontWeight = FontWeight.Black, letterSpacing = 1.sp, fontSize = 15.sp)
+            Text(
+                "URUCHOM SESJĘ", 
+                color = InkBlack, 
+                fontWeight = FontWeight.Black, 
+                letterSpacing = 2.sp, 
+                fontSize = 15.sp
+            )
         }
     }
 }
